@@ -5,10 +5,12 @@ Created on Sun Apr  7 09:52:16 2024
 @author: miche
 @author2: maazy
 """
-
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import contextily as ctx
+from shapely.geometry import Point
 import pandas as pd
 #import numpy as np
-import matplotlib.pyplot as plt
     
 def read_precip_data( PrecipfileName ):
     '''
@@ -321,7 +323,35 @@ def plot_tide( plotData , title , outFileName ):
     plt.ylabel('Tide (ft)', fontsize = 15) #y-axis label
     plt.title(title, fontsize = 20) #title of graph
     plt.savefig( outFileName )
-    
+
+
+def plot_latitude_longitudeMap(data_frame):
+
+    """
+    Plot points defined by latitude and longitude on a map using GeoPandas and Contextily.
+
+    Parameters:
+    - data_frame: DataFrame containing latitude and longitude columns.
+    """
+    # Create a GeoDataFrame from the latitude and longitude data
+    gdf = gpd.GeoDataFrame(
+        data_frame,
+        geometry=[Point(xy) for xy in zip(data_frame['LONGITUDE'], data_frame['LATITUDE'])],
+        crs="EPSG:4326"  # WGS 84
+    )
+
+    # Convert to Web Mercator for contextily compatibility
+    gdf = gdf.to_crs(epsg=3857)
+
+    # Plotting
+    fig, ax = plt.subplots(figsize=(10, 10))
+    gdf.plot(ax=ax, marker='o', color='red', markersize=50)
+
+    # Add basemap
+    ctx.add_basemap(ax)
+    ax.set_axis_off()
+    plt.savefig("MapDrawn.png")
+
 # the following condition checks whether we are running as a script, in which 
 # case run the test code, otherwise functions are being imported so do not.
 # put the main routines from your code after this conditional check.
@@ -368,3 +398,10 @@ if __name__ == '__main__':
     plot_precipitation( precip_data_check999['HPCP'] , 'Precipitation - Post 999 Check', 'Precipitation - Post 999 Check.png' )
 
     # Original vs. Post Blank Values Check (Both the files)
+
+    "----------------------------------Plot the Map ---------------------------------------------------------------"
+    
+    data_sample = pd.read_csv('Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv')
+    unique_locs = data_sample.drop_duplicates(subset=['LATITUDE', 'LONGITUDE'])
+
+    plot_latitude_longitudeMap(unique_locs)

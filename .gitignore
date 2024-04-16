@@ -6,8 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
-# Excel files
+# Excel files and dataset folder
 *.csv
+Datasets/ 
 
 # Distribution / packaging
 .Python
