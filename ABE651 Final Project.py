@@ -8,7 +8,7 @@ Created on Sun Apr  7 09:52:16 2024
 
 import pandas as pd
 #import numpy as np
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
     
 def read_precip_data( PrecipfileName ):
     '''
@@ -23,8 +23,6 @@ def read_precip_data( PrecipfileName ):
     Returns
     -------
     DataDF : A DataFrame that uses Date as the index.
-    ReplacedValuesDF : The initial DataFrame that will summarize the number of 
-    corrections made for all checks. The name of each check is used as the index.
 
     '''
     try:
@@ -34,12 +32,7 @@ def read_precip_data( PrecipfileName ):
                              index_col= [5], 
                              parse_dates=[5])
         #print(DataDF)
-        
-        # define and initialize the missing data frame
-        ReplacedValuesDF = pd.DataFrame(0, index=["1. No Data", "2. Gross Error", "3. Swapped","4. Range Fail"], columns=["HPCP"])
-        #print(ReplacedValuesDF)
-    
-        return(DataDF, ReplacedValuesDF)
+        return(DataDF)
 
     except FileNotFoundError:
         print(f"File not found: {PrecipfileName}")
@@ -54,9 +47,7 @@ def ClipPrecipData( DataDF, startDate, endDate ):
     missing values."""
     lenDataDF = len(DataDF)
     DataDF = DataDF['HPCP'].loc[startDate:endDate]
-    
-    print(DataDF)
-    
+        
     # quantify the number of missing values
     MissingValues = lenDataDF - len(DataDF)
     #print("Missing Values:" , MissingValues)
@@ -88,11 +79,9 @@ def read_tide_data( TidefileName ):
                              parse_dates=[0])
         #print(DataDF)
         
-        # define and initialize the missing data frame
-        ReplacedValuesDF = pd.DataFrame(0, index=["1. No Data", "2. Gross Error", "3. Swapped","4. Range Fail"], columns=["Verified Tide (ft)"])
-        #print(ReplacedValuesDF)
+        
     
-        return(DataDF, ReplacedValuesDF)
+        return(DataDF)
 
     except FileNotFoundError:
         print(f"File not found: {TidefileName}")
@@ -101,28 +90,27 @@ def read_tide_data( TidefileName ):
         print(f"The file at {TidefileName} is empty.")
         return None
 
-
 """ ------------------- Replacement of the Trace values to 0.005 inches --------------- """
 
-def replace_trace_precip_values(precip_file_path):
-    """
-    Reads the precipitation data file, replaces precipitation values where the 'Measurement Flag' is 'T' with 0.005 inches,
-    and counts the number of such replacements.
+def replace_trace_precip_values(precip_data):
+    '''
+    This function replaces precipitation values where the 'Measurement Flag' 
+    is 'T' with 0.005 inches, and counts the number of such replacements.
 
     Parameters
     ----------
-    precip_file_path : str
-        The file path for the precipitation data.
+    precip_data : str
+        The precipitation dataframe returned from the read_precip_data function.
 
     Returns
     -------
-    tuple
-        A tuple containing the modified DataFrame and the count of trace replacements.
-    """
-    try:
-        # Read the data file
-        precip_data = pd.read_csv(precip_file_path)
+    precip_data
+        cleaned precipitation dataframe.
+    trace_count
+        number of trace replacements
 
+    '''
+    try:
         # Identify rows where the Measurement Flag is 'T'
         trace_rows = precip_data['Measurement Flag'] == 'T'
 
@@ -132,7 +120,7 @@ def replace_trace_precip_values(precip_file_path):
         # Replace 'HPCP' values where 'Measurement Flag' is 'T' with 0.005 inches
         precip_data.loc[trace_rows, 'HPCP'] = 0.005
 
-        return precip_data, trace_count
+        return(precip_data, trace_count)
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -141,28 +129,25 @@ def replace_trace_precip_values(precip_file_path):
 
 """ ----------------------------- Data Quality Checks -------------------------------- """
 
-def DataQuality_check999(precip_file_path, tide_file_path):
-    """
-    Reads data from precipitation and tide files, removes entries where specific columns have the value 999,
-    and keeps a count of how many such entries were removed.
+def DataQuality_check999(precip_data):
+    '''
+    Reads data from precipitation and tide files, removes entries where 
+    specific columns have the value 999.99, and keeps a count of how many 
+    such entries were removed.
 
     Parameters
     ----------
-    precip_file : str
-        The file path for the precipitation data.
-    tide_file : str
-        The file path for the tide data.
+    precip_file_path : str
+        The precipitation dataframe returned from the read_precip_data function.
 
     Returns
     -------
-    tuple of (int, int)
-        A tuple containing the counts of removed 999 entries from precipitation and tide data, respectively.
+    precip_data_cleaned : int
+        Cleaned dataframe with removed 999.99.
+    precip_removed_count : int
+        A tuple containing the counts of removed 999.99 entries from precipitation.
 
-    """
-    # Read data files
-    precip_data = pd.read_csv(precip_file_path)
-    tide_data = pd.read_csv(tide_file_path)
-
+    '''
     # Convert data to float to avoid string comparison issues
     precip_data['HPCP'] = pd.to_numeric(precip_data['HPCP'], errors='coerce')
     
@@ -171,75 +156,68 @@ def DataQuality_check999(precip_file_path, tide_file_path):
     precip_data_cleaned = precip_data[precip_data['HPCP'] != 999.99]
     precip_removed_count = precip_original_count - len(precip_data_cleaned)
 
-    # Count and remove 999.99s in tide data
-    # Assuming no change needed here as tide data was previously correct
-    tide_original_count = len(tide_data)
-    tide_data['Verified (ft)'] = pd.to_numeric(tide_data['Verified (ft)'], errors='coerce')
-    tide_data_cleaned = tide_data[tide_data['Verified (ft)'] != 999.99]
-    tide_removed_count = tide_original_count - len(tide_data_cleaned)
 
-    return (precip_removed_count, tide_removed_count)
+    return (precip_data_cleaned, precip_removed_count)
 
-def DataQuality_checkBlanks(precip_file_path, tide_file_path):
-    """
-    Reads precipitation and tide data files, checks for blank (NaN or empty) entries in specific columns,
+def DataQuality_checkBlanks(precip_data, tide_data):
+    '''
+    This function checks for checks for blank (NaN or empty) entries 
+    in specific columns in precipitation and tide data files,
     and returns the count of such blanks for each file.
 
     Parameters
     ----------
-    precip_file_path : str
-        The file path for the precipitation data.
-    tide_file_path : str
-        The file path for the tide data.
+    precip_data : str
+        The precipitation dataframe returned from the read_precip_data function.
+    tide_data : str
+        The tide dataframe returned from the read_tide_data function.
 
     Returns
     -------
     tuple of (int, int)
         A tuple containing the counts of blank entries in specific columns of the precipitation and tide data, respectively.
-    """
-    try:
-        # Read the data files
-        precip_data = pd.read_csv(precip_file_path)
-        tide_data = pd.read_csv(tide_file_path)
 
+    '''
+    try:
         # Check for blanks in precipitation data in 'HPCP' column
         precip_blanks_count = precip_data['HPCP'].isna().sum()
 
         # Check for blanks in tide data in 'Verified (ft)' column
         tide_blanks_count = tide_data['Verified (ft)'].isna().sum()
 
-        return (precip_blanks_count, tide_blanks_count)
+
+        return ( precip_blanks_count, tide_blanks_count )
 
     except Exception as e:
         print(f"An error occurred: {e}")
-        return (0, 0) 
+        return (0, 0)
+    
 
-def DataQuality_checkGross(precip_file_path, tide_file_path):
-    """
-    Reads precipitation and tide data files, checks for gross errors in specific columns based on defined conditions,
-    and returns the count of such errors for each file.
+def DataQuality_checkGross(precip_data, tide_data):
+    '''
+    This function checks for gross errors in specific columns based on 
+    defined conditions in precipitation and tide data files, and returns the 
+    count of such errors for each file.
 
     Parameters
     ----------
-    precip_file_path : str
-        The file path for the precipitation data.
-    tide_file_path : str
-        The file path for the tide data.
+    precip_data : str
+        The precipitation dataframe returned from the read_precip_data function.
+    tide_data : str
+        The tide dataframe returned from the read_tide_data function.
 
     Returns
     -------
     tuple of (int, int)
-        A tuple containing the counts of gross error entries in specific columns of the precipitation and tide data, respectively.
-    """
-    try:
-        # Read the data files
-        precip_data = pd.read_csv(precip_file_path)
-        tide_data = pd.read_csv(tide_file_path)
+        A tuple containing the counts of gross error entries in specific 
+        columns of the precipitation and tide data, respectively.
 
+    '''
+    try:
         # Check for gross errors in precipitation data
-        # Gross error defined as values outside the range 0.0 inches to 0.4 inches
+        # Gross error defined as values outside the range 0 inches to 4 inches
         precip_data['HPCP'] = pd.to_numeric(precip_data['HPCP'], errors='coerce')  # Ensure data is float
-        precip_gross_errors = precip_data[(precip_data['HPCP'] < 0.0) | (precip_data['HPCP'] > 0.4)].shape[0]
+        precip_gross_errors = precip_data[(precip_data['HPCP'] < 0) | (precip_data['HPCP'] > 4)].shape[0]
 
         # Check for gross errors in tide data
         # Gross error defined as values outside the range -3 feet to 3 feet
@@ -252,8 +230,97 @@ def DataQuality_checkGross(precip_file_path, tide_file_path):
         print(f"An error occurred: {e}")
         return (0, 0)  
 
-
 """ ----------------------------------- Data Quality Check function Ends-------------------------------------- """
+""" ---------------------------- Summary table with data quality checking results ---------------------------- """
+
+def ReplacedValuesDF( Precip_trace, Precip_check999, Precip_checkBlanks, Tide_checkBlanks, Precip_gross_errors , Tide_gross_errors):
+    # define and initialize the missing data frame
+    ReplacedValuesDF = pd.DataFrame(0, index=["1. Replace Trace Values", "2. 999.99", "3. Blanks","4. Gross Error"], columns=["Precipitation", "Verified Tide"])
+    #print(ReplacedValuesDF)
+    ReplacedValuesDF.loc["1. Replace Trace Values", "Precipitation"] = Precip_trace
+    ReplacedValuesDF.loc["1. Replace Trace Values", "Verified Tide"] = 0
+
+    ReplacedValuesDF.loc["2. 999.99", "Precipitation"] = Precip_check999
+    ReplacedValuesDF.loc["2. 999.99", "Verified Tide"] = 0
+
+    ReplacedValuesDF.loc["3. Blanks", "Precipitation"] = Precip_checkBlanks
+    ReplacedValuesDF.loc["3. Blanks", "Verified Tide"] = Tide_checkBlanks
+    
+    ReplacedValuesDF.loc["4. Gross Error", "Precipitation"] = Precip_gross_errors
+    ReplacedValuesDF.loc["4. Gross Error", "Verified Tide"] = Tide_gross_errors
+    
+    ReplacedValuesDF.to_csv('ReplacedValuesDF.txt', sep='\t', index=True)
+    
+    return(ReplacedValuesDF)
+""" ------------------------------------ Data Quality Graphical Analysis -------------------------------------- """
+
+def plot_precipitation( plotData , title , outFileName ):
+    '''
+    This function plots each precipitation dataset before and after correction 
+    has been made. 
+
+    Parameters
+    ----------
+    precip_file_path : str
+    The file path for the precipitation data.
+
+    Returns
+    -------
+    None.
+
+    '''
+    plt.figure(figsize=(10, 5))
+    plotData.plot(use_index=True, color = 'b')
+    plt.xlabel('Date', fontsize = 15) #x-axis label
+    plt.ylabel('Precipitation (in)', fontsize = 15) #y-axis label
+    plt.title(title, fontsize = 20) #title of graph
+    plt.savefig( outFileName )
+
+def plot_check999( original_plotData , new_plotData , title , outFileName ):
+    '''
+    This function plots each precipitation dataset before and after correction 
+    has been made. 
+
+    Parameters
+    ----------
+    precip_file_path : str
+    The file path for the precipitation data.
+
+    Returns
+    -------
+    None.
+
+    '''
+    plt.figure(figsize=(10, 5))
+    original_plotData.plot(use_index=True, color = 'b', label = 'Original Precipitation')
+    new_plotData.plot(use_index=True, color = 'r', label = 'Removed 999.99')
+    plt.xlabel('Date', fontsize = 15) #x-axis label
+    plt.ylabel('Precipitation (in)', fontsize = 15) #y-axis label
+    plt.legend(fontsize = 8, loc = "upper right") #legend label
+    plt.title(title, fontsize = 20) #title of graph
+    plt.savefig( outFileName )    
+    
+def plot_tide( plotData , title , outFileName ):
+    '''
+    This function plots each precipitation dataset before and after correction 
+    has been made. 
+
+    Parameters
+    ----------
+    precip_file_path : str
+    The file path for the precipitation data.
+
+    Returns
+    -------
+    None.
+
+    '''
+    plt.figure(figsize=(10, 5))
+    plotData.plot(use_index=True, color = 'b')
+    plt.xlabel('Date', fontsize = 15) #x-axis label
+    plt.ylabel('Tide (ft)', fontsize = 15) #y-axis label
+    plt.title(title, fontsize = 20) #title of graph
+    plt.savefig( outFileName )
     
 # the following condition checks whether we are running as a script, in which 
 # case run the test code, otherwise functions are being imported so do not.
@@ -261,30 +328,43 @@ def DataQuality_checkGross(precip_file_path, tide_file_path):
 
 if __name__ == '__main__':
     PrecipfileName = "Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv"
-    PrecipDataDF, ReplacedPrecipValuesDF = read_precip_data(PrecipfileName)
+    PrecipDataDF = read_precip_data(PrecipfileName)
     
     Clipped_Precip_DataDF = ClipPrecipData( PrecipDataDF, "2005-01-01", "2005-12-31")
-    
+
     TidefileName = "Datasets/Hourly Tide Data/CO-OPS_8725520_2005.csv"
-    TideDataDF, ReplacedTideValuesDF = read_tide_data( TidefileName )
-
-
-    # 1. Data Quality Check for 999 Values in (Both the files)
-    percip_data_removed, tide_data_reomved =  DataQuality_check999("Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv", "Datasets/Hourly Tide Data/CO-OPS_8725520_2005.csv")
-    #print(f"Removed {percip_data_removed} entries from precipitation data and {tide_data_reomved} entries from tide data.")
-
+    TideDataDF = read_tide_data( TidefileName )
+    
+    # 1. Data Quality Check for 999.99 Values in Precipitation Data
+    precip_data_check999, precip_data_removed =  DataQuality_check999(PrecipDataDF)
+    #print(f"Removed {precip_data_removed} entries from precipitation data")
+    
     # 2. Data Quality Check for Blank Values in (Both the files)
-    precip_blanks, tide_blanks = DataQuality_checkBlanks("Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv", "Datasets/Hourly Tide Data/CO-OPS_8725520_2005.csv")
-    # print(f"Blank entries found: {precip_blanks} in precipitation data, {tide_blanks} in tide data.")
+    precip_blanks, tide_blanks = DataQuality_checkBlanks(precip_data_check999, TideDataDF)
+    #print(f"Blank entries found: {precip_blanks} in precipitation data, {tide_blanks} in tide data.")
 
     # 3. Data Quality Check for Gross Values in (Both the files)
-    precip_gross_errors, tide_gross_errors = DataQuality_checkGross("Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv", "Datasets/Hourly Tide Data/CO-OPS_8725520_2005.csv")
-    # print(f"Gross error entries found: {precip_gross_errors} in precipitation data, {tide_gross_errors} in tide data.")
+    precip_gross_errors, tide_gross_errors = DataQuality_checkGross(precip_data_check999, TideDataDF)
+    #print(f"Gross error entries found: {precip_gross_errors} in precipitation data, {tide_gross_errors} in tide data.")
 
     # Checking whether the replacement worked
-    modified_precip_data, trace_replacements = replace_trace_precip_values("Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv")
-    # print(f"Trace values replaced: {trace_replacements}")
+    modified_precip_data, trace_replacements = replace_trace_precip_values(precip_data_check999)
+    #print(f"Trace values replaced: {trace_replacements}")
 
     # modified_precip_data.to_csv("Datasets/Modified_Hourly_Precipitation_Data_Fort_Myers_FL.csv", index=False) 
+    """ ----------------------------- Summary table with data quality checking results---------------------------- """
 
+    ReplacedValuesDF( trace_replacements, precip_data_removed, precip_blanks, tide_blanks, precip_gross_errors , tide_gross_errors)
+    
+    """ ----------------------------- Data Quality Graphical Analysis Starts-------------------------------------- """
+    # Original Precipitation Plots 
+    plot_precipitation( PrecipDataDF['HPCP'], 'Precipitation_All', 'Precipitation_All.png' )       
+    plot_precipitation( Clipped_Precip_DataDF[0] , 'Precipitation_2015', 'Precipitation_2015.png' )
 
+    plot_tide( TideDataDF['Verified (ft)'] , 'Tide - 2015' , 'Tide_2015.png' )
+    
+    # Original Precipitation vs. Precipitation - Post 999 Check
+    plot_check999( PrecipDataDF['HPCP'] , precip_data_check999['HPCP'] , 'Precipitation Check 999.99', 'Precipitation_check999.png' )
+    plot_precipitation( precip_data_check999['HPCP'] , 'Precipitation - Post 999 Check', 'Precipitation - Post 999 Check.png' )
+
+    # Original vs. Post Blank Values Check (Both the files)
