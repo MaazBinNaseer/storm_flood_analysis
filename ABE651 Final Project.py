@@ -7,10 +7,12 @@ Created on Sun Apr  7 09:52:16 2024
 """
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import contextily as ctx
+#import contextily as ctx
 from shapely.geometry import Point
 import pandas as pd
 #import numpy as np
+import os  #os = operating system, which will be used to open files
+
     
 def read_precip_data( PrecipfileName ):
     '''
@@ -33,6 +35,7 @@ def read_precip_data( PrecipfileName ):
                              header='infer',
                              index_col= [5], 
                              parse_dates=[5])
+        DataDF.sort_index() # Sort the index in ascending order
         #print(DataDF)
         return(DataDF)
 
@@ -43,18 +46,13 @@ def read_precip_data( PrecipfileName ):
         print(f"The file at {PrecipfileName} is empty.")
         return None
 
-def ClipPrecipData( DataDF, startDate, endDate ):
-    """This function clips the given Preciptaiton time series dataframe to a given range 
+def ClipData( DataDF, startDate, endDate ):
+    """This function clips the given time series dataframe to a given range 
     of dates. Function returns the clipped dataframe and and the number of 
     missing values."""
-    lenDataDF = len(DataDF)
-    DataDF = DataDF['HPCP'].loc[startDate:endDate]
-        
-    # quantify the number of missing values
-    MissingValues = lenDataDF - len(DataDF)
-    #print("Missing Values:" , MissingValues)
+    DataDF = DataDF.loc[startDate:endDate]
     
-    return DataDF, MissingValues
+    return DataDF
 
 def read_tide_data( TidefileName ):
     '''
@@ -64,11 +62,11 @@ def read_tide_data( TidefileName ):
 
     Parameters
     ----------
-    fileName : Input file = "Datasets/Hourly Tide Data/CO-OPS_8725520_2005.csv"
+    fileName : Input .CSV file including tide data
 
     Returns
     -------
-    DataDF : A DataFrame that uses Date as the index.
+    DataDF : A DataFrame that uses Date as the index, sorted in ascending order.
     ReplacedValuesDF : The initial DataFrame that will summarize the number of 
     corrections made for all checks. The name of each check is used as the index.
 
@@ -79,6 +77,7 @@ def read_tide_data( TidefileName ):
                              header='infer',
                              index_col= [0],
                              parse_dates=[0])
+        DataDF = DataDF.sort_index() # Sort the index in ascending order
         #print(DataDF)
         
         
@@ -91,6 +90,27 @@ def read_tide_data( TidefileName ):
     except pd.errors.EmptyDataError:
         print(f"The file at {TidefileName} is empty.")
         return None
+
+def modified_tide_data_csv( DataDF, outFileName):
+    '''
+    This function will output the modified tide data to a CSV file
+
+    Parameters
+    ----------
+    DataDF : DataFrame from the function, read_tide_data
+
+    outFileName : Output .CSV file name
+
+    Returns
+    -------
+    None.
+
+    '''
+    if os.path.isfile(outFileName): #this if statement checks to see if the output file exists
+        DataDF.to_csv(outFileName, mode='a', index=True, header=False)
+        
+    else:     
+        DataDF.to_csv(outFileName)
 
 """ ------------------- Replacement of the Trace values to 0.005 inches --------------- """
 
@@ -219,7 +239,7 @@ def DataQuality_checkGross(precip_data, tide_data):
         # Check for gross errors in precipitation data
         # Gross error defined as values outside the range 0 inches to 4 inches
         precip_data['HPCP'] = pd.to_numeric(precip_data['HPCP'], errors='coerce')  # Ensure data is float
-        precip_gross_errors = precip_data[(precip_data['HPCP'] < 0) | (precip_data['HPCP'] > 4)].shape[0]
+        precip_gross_errors = precip_data[(precip_data['HPCP'] < 0) | (precip_data[5] > 4)].shape[0]
 
         # Check for gross errors in tide data
         # Gross error defined as values outside the range -3 feet to 3 feet
@@ -232,12 +252,13 @@ def DataQuality_checkGross(precip_data, tide_data):
         print(f"An error occurred: {e}")
         return (0, 0)  
 
-""" ----------------------------------- Data Quality Check function Ends-------------------------------------- """
+""" ----------------------------------- Data Quality Check function Ends-------------------------------------- """    
+
 """ ---------------------------- Summary table with data quality checking results ---------------------------- """
 
 def ReplacedValuesDF( Precip_trace, Precip_check999, Precip_checkBlanks, Tide_checkBlanks, Precip_gross_errors , Tide_gross_errors):
     # define and initialize the missing data frame
-    ReplacedValuesDF = pd.DataFrame(0, index=["1. Replace Trace Values", "2. 999.99", "3. Blanks","4. Gross Error"], columns=["Precipitation", "Verified Tide"])
+    ReplacedValuesDF = pd.DataFrame(0, index=["1. Replace Trace Values", "2. 999.99", "3. Blanks","4. Gross Error", "5. Spike Check"], columns=["Precipitation", "Verified Tide"])
     #print(ReplacedValuesDF)
     ReplacedValuesDF.loc["1. Replace Trace Values", "Precipitation"] = Precip_trace
     ReplacedValuesDF.loc["1. Replace Trace Values", "Verified Tide"] = 0
@@ -304,26 +325,30 @@ def plot_check999( original_plotData , new_plotData , title , outFileName ):
     
 def plot_tide( plotData , title , outFileName ):
     '''
-    This function plots each precipitation dataset before and after correction 
-    has been made. 
+    This function plots the original tide dataset.
 
     Parameters
     ----------
-    precip_file_path : str
-    The file path for the precipitation data.
+    plotData : float
+        The clipped tide data.
+    title : str
+        Title of the plot
+    outFileName : str
+        Title of the .PNG file name
 
     Returns
     -------
     None.
 
     '''
+    plotData = pd.to_numeric(plotData, errors='coerce')  # Ensure data is float
+    
     plt.figure(figsize=(10, 5))
     plotData.plot(use_index=True, color = 'b')
     plt.xlabel('Date', fontsize = 15) #x-axis label
     plt.ylabel('Tide (ft)', fontsize = 15) #y-axis label
     plt.title(title, fontsize = 20) #title of graph
     plt.savefig( outFileName )
-
 
 def plot_latitude_longitudeMap(data_frame):
 
@@ -358,12 +383,33 @@ def plot_latitude_longitudeMap(data_frame):
 
 if __name__ == '__main__':
     PrecipfileName = "Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv"
-    PrecipDataDF = read_precip_data(PrecipfileName)
-    
-    Clipped_Precip_DataDF = ClipPrecipData( PrecipDataDF, "2005-01-01", "2005-12-31")
+    PrecipDataDF_1998_2013 = read_precip_data(PrecipfileName)
 
-    TidefileName = "Datasets/Hourly Tide Data/CO-OPS_8725520_2005.csv"
-    TideDataDF = read_tide_data( TidefileName )
+    '''tide_fileName = {"Datasets/Hourly Tide Data/CO-OPS_8725520_1998.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_1999.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2000.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2001.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2002.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2003.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2004.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2005.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2006.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2007.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2008.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2009.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2010.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2011.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2012.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2013.csv"}
+    
+    for file in tide_fileName:
+        tideDF = read_tide_data( file )
+        modified_tide_data = modified_tide_data_csv( tideDF , "Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2013.csv") '''
+    TideDataDF_1998_2013 = read_tide_data( "Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2013.csv")
+    
+    # Clip Precipitation and Tide Dataframes to given time periods
+    PrecipDataDF = ClipData( PrecipDataDF_1998_2013 , "2004-01-01", "2013-12-31")
+    TideDataDF = ClipData( TideDataDF_1998_2013, "2004-01-01", "2013-12-31")
     
     # 1. Data Quality Check for 999.99 Values in Precipitation Data
     precip_data_check999, precip_data_removed =  DataQuality_check999(PrecipDataDF)
@@ -382,20 +428,20 @@ if __name__ == '__main__':
     #print(f"Trace values replaced: {trace_replacements}")
 
     # modified_precip_data.to_csv("Datasets/Modified_Hourly_Precipitation_Data_Fort_Myers_FL.csv", index=False) 
+    
     """ ----------------------------- Summary table with data quality checking results---------------------------- """
 
     ReplacedValuesDF( trace_replacements, precip_data_removed, precip_blanks, tide_blanks, precip_gross_errors , tide_gross_errors)
     
     """ ----------------------------- Data Quality Graphical Analysis Starts-------------------------------------- """
-    # Original Precipitation Plots 
-    plot_precipitation( PrecipDataDF['HPCP'], 'Precipitation_All', 'Precipitation_All.png' )       
-    plot_precipitation( Clipped_Precip_DataDF[0] , 'Precipitation_2015', 'Precipitation_2015.png' )
-
-    plot_tide( TideDataDF['Verified (ft)'] , 'Tide - 2015' , 'Tide_2015.png' )
+    # Original Precipitation Plot
+    plot_precipitation( PrecipDataDF['HPCP'], 'Raw Precipitation Data', 'Raw Precipitation Data.png' )       
+    
+    plot_tide(TideDataDF['Verified (ft)'], 'Raw Tide Data', 'Raw Tide Data.png')
     
     # Original Precipitation vs. Precipitation - Post 999 Check
-    plot_check999( PrecipDataDF['HPCP'] , precip_data_check999['HPCP'] , 'Precipitation Check 999.99', 'Precipitation_check999.png' )
-    plot_precipitation( precip_data_check999['HPCP'] , 'Precipitation - Post 999 Check', 'Precipitation - Post 999 Check.png' )
+    plot_check999(PrecipDataDF['HPCP'], precip_data_check999['HPCP'], 'Precipitation Check 999.99', 'Precipitation_check999.png' )
+    plot_precipitation(precip_data_check999['HPCP'],'Precipitation - Post 999 Check', 'Precipitation - Post 999 Check.png' )
 
     # Original vs. Post Blank Values Check (Both the files)
 
@@ -404,4 +450,4 @@ if __name__ == '__main__':
     data_sample = pd.read_csv('Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv')
     unique_locs = data_sample.drop_duplicates(subset=['LATITUDE', 'LONGITUDE'])
 
-    plot_latitude_longitudeMap(unique_locs)
+    # plot_latitude_longitudeMap(unique_locs)
