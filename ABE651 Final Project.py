@@ -79,8 +79,6 @@ def read_tide_data( TidefileName ):
                              parse_dates=[0])
         DataDF = DataDF.sort_index() # Sort the index in ascending order
         #print(DataDF)
-        
-        
     
         return(DataDF)
 
@@ -93,7 +91,7 @@ def read_tide_data( TidefileName ):
 
 def modified_tide_data_csv( DataDF, outFileName):
     '''
-    This function will output the modified tide data to a CSV file
+    This function will write the modified tide data to a .CSV file
 
     Parameters
     ----------
@@ -112,7 +110,134 @@ def modified_tide_data_csv( DataDF, outFileName):
     else:     
         DataDF.to_csv(outFileName)
 
-""" ------------------- Replacement of the Trace values to 0.005 inches --------------- """
+def assign_season(date):
+    '''
+    This function returns a string of the season determined by the month of the date
+    
+    Inputs
+    ----------
+    date : Equivalent to the month of the date
+
+    Returns
+    -------
+    str: Season
+    '''
+    
+    month = date.month
+    if month in [12, 1, 2]: # December to February
+        #print('winter')
+        return 'Winter'
+    elif month in [3, 4, 5]: # March to May
+        #print('spring')
+        return 'Spring'
+    elif month in [6, 7, 8]: # June to August 
+        #print('summer')
+        return 'Summer'
+    else: # months 9, 10, 11 or September to November
+        #print('fall')
+        return 'Fall'
+    
+def precip_station_info( DataDF ):
+    '''
+    This function groups the station information for all the precipitation 
+    stations, including latitude, longitude, and elevation
+    
+    Inputs
+    ----------
+    DataDF : The daily precipitation dataframe from all stations
+
+    Returns
+    -------
+    df : The station info Pandas Dataframe grouped by station location
+    
+    '''
+    #Step 1) Create a blank dataframe with station info
+    station_info_df = pd.DataFrame(columns=["Station", "Latitude", "Longitude", "Elevation"])
+    #print(df)
+
+    # Step 1) Organize by Station # in DataDF Dataframe using the Grouby Method
+    precip_data_df = DataDF.groupby('STATION')
+    #print(DataDF)
+    
+    # Annual Average Total Water Depth(mm)
+    # Step 1) Populate Station Info Dataframe
+    station_info_df["Latitude"]= precip_data_df['LATITUDE'].mean()
+    station_info_df["Longitude"]= precip_data_df['LONGITUDE'].mean()
+    station_info_df["Elevation"]= precip_data_df['ELEVATION'].mean()
+    
+    #print(df)
+    
+    # Seasons
+    # Step 1) Resample maximum daily precipitation by month
+    seasonal_resample = precip_data_df['PRCP'].resample("MS").max()
+    seasonal_df = pd.DataFrame(seasonal_resample)
+    seasonal_df.reset_index(inplace=True) # removes the index
+    seasonal_df['Date'] = pd.to_datetime(seasonal_df['DATE']) # Convert 'Date' column into panda date format
+    seasonal_df.set_index('Date', inplace=True) # index the 'Date' column
+    print(seasonal_df)
+    
+    # Step 2) Create a new column in seasonal_df DF to assign seasons for each date
+    seasonal_df['Season'] = seasonal_df.index.map(assign_season)
+    print("Seasonal DF:", seasonal_df)
+
+    # Step 3) Initialize dictionaries to hold maximum precipitation values for each station
+    seasonal_precip = {'Winter': {}, 'Spring': {}, 'Summer': {}, 'Fall': {}}
+
+    # Step 4) Loop through each station and season to compute annual seasonal average Total VWC
+    for station in station_info_df['Station'].unique():
+        #print(station)
+        station_data = seasonal_df[seasonal_df['STATION'] == station]
+        #print(station_data)
+        
+        if not station_data.empty: 
+            for season in ['Winter', 'Spring', 'Summer', 'Fall']: 
+                season_data = station_data[station_data['Season'] == season] 
+                max_seasonal_precip = round(season_data['PRCP'].max(), 4) 
+                seasonal_precip[season][station] = max_seasonal_precip 
+                  
+    
+    # Step 5) Add the maximum seasonal precipitation into the station info df     
+    station_info_df.loc[:,'Winter Precipitation (in.)'] = seasonal_precip['Winter']
+    station_info_df.loc[:,'Spring Precipitation (in.)'] = seasonal_precip['Spring']
+    station_info_df.loc[:,'Summer Precipitation (in.)'] = seasonal_precip['Summer']
+    station_info_df.loc[:,'Fall Precipitation (in.)'] = seasonal_precip['Fall']
+    station_info_df.reset_index(inplace=True) # removes the index and returns it as a column in the df
+    
+    print(station_info_df.head(10))
+    print(station_info_df.tail(10))
+    
+    return station_info_df
+""" ----------------------------- Data Quality Checks -------------------------------- """
+
+def DataQuality_check999(precip_data):
+    '''
+    Reads data from precipitation and tide files, removes entries where 
+    specific columns have the value 999.99, and keeps a count of how many 
+    such entries were removed.
+
+    Parameters
+    ----------
+    precip_file_path : str
+        The precipitation dataframe returned from the read_precip_data function.
+
+    Returns
+    -------
+    precip_data_cleaned : int
+        Cleaned dataframe with removed 999.99.
+    precip_removed_count : int
+        A tuple containing the counts of removed 999.99 entries from precipitation.
+
+    '''
+    # Convert data to float to avoid string comparison issues
+    precip_data['HPCP'] = pd.to_numeric(precip_data['HPCP'], errors='coerce')
+    
+    # Count and remove 999.99s in precipitation data
+    precip_original_count = len(precip_data)
+    precip_data_cleaned = precip_data[precip_data['HPCP'] != 999.99]
+    precip_removed_count = precip_original_count - len(precip_data_cleaned)
+
+
+    return (precip_data_cleaned, precip_removed_count)
 
 def replace_trace_precip_values(precip_data):
     '''
@@ -147,39 +272,6 @@ def replace_trace_precip_values(precip_data):
     except Exception as e:
         print(f"An error occurred: {e}")
         return None, 0
-
-
-""" ----------------------------- Data Quality Checks -------------------------------- """
-
-def DataQuality_check999(precip_data):
-    '''
-    Reads data from precipitation and tide files, removes entries where 
-    specific columns have the value 999.99, and keeps a count of how many 
-    such entries were removed.
-
-    Parameters
-    ----------
-    precip_file_path : str
-        The precipitation dataframe returned from the read_precip_data function.
-
-    Returns
-    -------
-    precip_data_cleaned : int
-        Cleaned dataframe with removed 999.99.
-    precip_removed_count : int
-        A tuple containing the counts of removed 999.99 entries from precipitation.
-
-    '''
-    # Convert data to float to avoid string comparison issues
-    precip_data['HPCP'] = pd.to_numeric(precip_data['HPCP'], errors='coerce')
-    
-    # Count and remove 999.99s in precipitation data
-    precip_original_count = len(precip_data)
-    precip_data_cleaned = precip_data[precip_data['HPCP'] != 999.99]
-    precip_removed_count = precip_original_count - len(precip_data_cleaned)
-
-
-    return (precip_data_cleaned, precip_removed_count)
 
 def DataQuality_checkBlanks(precip_data, tide_data):
     '''
@@ -252,8 +344,6 @@ def DataQuality_checkGross(precip_data, tide_data):
         print(f"An error occurred: {e}")
         return (0, 0)  
 
-""" ----------------------------------- Data Quality Check function Ends-------------------------------------- """    
-
 """ ---------------------------- Summary table with data quality checking results ---------------------------- """
 
 def ReplacedValuesDF( Precip_trace, Precip_check999, Precip_checkBlanks, Tide_checkBlanks, Precip_gross_errors , Tide_gross_errors):
@@ -279,13 +369,16 @@ def ReplacedValuesDF( Precip_trace, Precip_check999, Precip_checkBlanks, Tide_ch
 
 def plot_precipitation( plotData , title , outFileName ):
     '''
-    This function plots each precipitation dataset before and after correction 
-    has been made. 
+    This function plots the raw precipitation data values.
 
     Parameters
     ----------
-    precip_file_path : str
-    The file path for the precipitation data.
+    plotData : float
+        The clipped tide data in a Pandas Dataframe.
+    title : str
+        Title of the plot
+    outFileName : str
+        Title of the output .PNG file name
 
     Returns
     -------
@@ -299,15 +392,48 @@ def plot_precipitation( plotData , title , outFileName ):
     plt.title(title, fontsize = 20) #title of graph
     plt.savefig( outFileName )
 
-def plot_check999( original_plotData , new_plotData , title , outFileName ):
+def plot_tide( plotData , title , outFileName ):
     '''
-    This function plots each precipitation dataset before and after correction 
-    has been made. 
+    This function plots the raw tide data values.
 
     Parameters
     ----------
-    precip_file_path : str
-    The file path for the precipitation data.
+    plotData : float
+        The clipped tide data in a Pandas Dataframe.
+    title : str
+        Title of the plot
+    outFileName : str
+        Title of the output .PNG file name
+
+    Returns
+    -------
+    None.
+
+    '''
+    plotData = pd.to_numeric(plotData, errors='coerce')  # Ensure data is float
+    
+    plt.figure(figsize=(10, 5))
+    plotData.plot(use_index=True, color = 'b')
+    plt.xlabel('Date', fontsize = 15) #x-axis label
+    plt.ylabel('Tide (ft)', fontsize = 15) #y-axis label
+    plt.title(title, fontsize = 20) #title of graph
+    plt.savefig( outFileName )
+    
+def plot_check999( original_plotData , new_plotData , title , outFileName ):
+    '''
+    This function plots each precipitation dataset before and after the check999
+    correction has been made. 
+
+    Parameters
+    ----------
+    original_plotData : float
+        The raw data in a Pandas Dataframe.
+    new_plotData : float
+        The corrected data in a Pandas Dataframe.
+    title : str
+        Title of the plot
+    outFileName : str
+        Title of the output .PNG file name
 
     Returns
     -------
@@ -323,41 +449,57 @@ def plot_check999( original_plotData , new_plotData , title , outFileName ):
     plt.title(title, fontsize = 20) #title of graph
     plt.savefig( outFileName )    
     
-def plot_tide( plotData , title , outFileName ):
+def plot_trace( original_plotData , new_plotData , title , outFileName ):
     '''
-    This function plots the original tide dataset.
+    This function plots each precipitation dataset before and after the trace
+    correction has been made. 
 
     Parameters
     ----------
-    plotData : float
-        The clipped tide data.
+    original_plotData : float
+        The raw data in a Pandas Dataframe.
+    new_plotData : float
+        The corrected data in a Pandas Dataframe.
     title : str
         Title of the plot
     outFileName : str
-        Title of the .PNG file name
+        Title of the output .PNG file name
 
     Returns
     -------
     None.
 
     '''
-    plotData = pd.to_numeric(plotData, errors='coerce')  # Ensure data is float
-    
     plt.figure(figsize=(10, 5))
-    plotData.plot(use_index=True, color = 'b')
+    original_plotData.plot(use_index=True, color = 'b', label = 'Original Precipitation')
+    new_plotData.plot(use_index=True, color = 'r', label = 'Replaced Trace Values')
     plt.xlabel('Date', fontsize = 15) #x-axis label
-    plt.ylabel('Tide (ft)', fontsize = 15) #y-axis label
+    plt.ylabel('Precipitation (in)', fontsize = 15) #y-axis label
+    plt.legend(fontsize = 8, loc = "upper right") #legend label
     plt.title(title, fontsize = 20) #title of graph
-    plt.savefig( outFileName )
+    plt.savefig( outFileName )    
+    
+    
+
+    
+
+    
+"----------------------------------Plot the Map ---------------------------------------------------------------"
 
 def plot_latitude_longitudeMap(data_frame):
-
-    """
+    '''
     Plot points defined by latitude and longitude on a map using GeoPandas and Contextily.
 
-    Parameters:
-    - data_frame: DataFrame containing latitude and longitude columns.
-    """
+    Parameters
+    ----------
+    data_frame : float
+        DataFrame containing latitude and longitude columns
+
+    Returns
+    -------
+    None.
+
+    '''
     # Create a GeoDataFrame from the latitude and longitude data
     gdf = gpd.GeoDataFrame(
         data_frame,
@@ -382,10 +524,24 @@ def plot_latitude_longitudeMap(data_frame):
 # put the main routines from your code after this conditional check.
 
 if __name__ == '__main__':
+    '''# File location of Daily precipitation file
+    DailyPrecipfileName = "Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv"
+    
+    # Create Pandas Dataframe that contains daily precipitation values from 2003 to 2023
+    DailyPrecipDataDF_2003_2023 = read_precip_data( DailyPrecipfileName )
+    
+    # Group Precipitation Data by Station
+    precip_station_info( DailyPrecipDataDF_2003_2023 )'''
+    
+    # File location of hourly precipitation file
     PrecipfileName = "Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv"
+    
+    # Create Pandas Dataframe that contains precipitation values from 1998 to 2013
+    # This Data source only has hourly precipitation until 2013
     PrecipDataDF_1998_2013 = read_precip_data(PrecipfileName)
 
-    '''tide_fileName = {"Datasets/Hourly Tide Data/CO-OPS_8725520_1998.csv",
+    '''# Combine yearly tide data into one .CSV file
+    tide_fileName = {"Datasets/Hourly Tide Data/CO-OPS_8725520_1998.csv",
                      "Datasets/Hourly Tide Data/CO-OPS_8725520_1999.csv",
                      "Datasets/Hourly Tide Data/CO-OPS_8725520_2000.csv",
                      "Datasets/Hourly Tide Data/CO-OPS_8725520_2001.csv",
@@ -400,35 +556,48 @@ if __name__ == '__main__':
                      "Datasets/Hourly Tide Data/CO-OPS_8725520_2010.csv",
                      "Datasets/Hourly Tide Data/CO-OPS_8725520_2011.csv",
                      "Datasets/Hourly Tide Data/CO-OPS_8725520_2012.csv",
-                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2013.csv"}
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2013.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2014.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2015.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2016.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2017.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2018.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2019.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2020.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2021.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2022.csv",
+                     "Datasets/Hourly Tide Data/CO-OPS_8725520_2023.csv"}
     
     for file in tide_fileName:
         tideDF = read_tide_data( file )
-        modified_tide_data = modified_tide_data_csv( tideDF , "Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2013.csv") '''
-    TideDataDF_1998_2013 = read_tide_data( "Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2013.csv")
+        modified_tide_data = modified_tide_data_csv( tideDF , "Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2023.csv")'''
     
-    # Clip Precipitation and Tide Dataframes to given time periods
+    # Create Pandas Dataframe that contains tide values from 1998 to 2013
+    TideDataDF_1998_2023 = read_tide_data( "Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2023.csv")
+    
+    # Clip Precipitation and Tide Dataframes to given time periods (January 2004 to December 2023)
     PrecipDataDF = ClipData( PrecipDataDF_1998_2013 , "2004-01-01", "2013-12-31")
-    TideDataDF = ClipData( TideDataDF_1998_2013, "2004-01-01", "2013-12-31")
-    
+    TideDataDF = ClipData( TideDataDF_1998_2023, "2004-01-01", "2023-12-31")
+        
     # 1. Data Quality Check for 999.99 Values in Precipitation Data
     precip_data_check999, precip_data_removed =  DataQuality_check999(PrecipDataDF)
     #print(f"Removed {precip_data_removed} entries from precipitation data")
     
-    # 2. Data Quality Check for Blank Values in (Both the files)
+    # 2. Replace trace precipitation values
+    precip_data_trace_replace, trace_replacements = replace_trace_precip_values(precip_data_check999)
+    #print(f"Trace values replaced: {trace_replacements}")
+    
+    # 3. Data Quality Check for Blank Values in (Both the files)
     precip_blanks, tide_blanks = DataQuality_checkBlanks(precip_data_check999, TideDataDF)
     #print(f"Blank entries found: {precip_blanks} in precipitation data, {tide_blanks} in tide data.")
 
-    # 3. Data Quality Check for Gross Values in (Both the files)
+    # 4. Data Quality Check for Gross Values in (Both the files)
     precip_gross_errors, tide_gross_errors = DataQuality_checkGross(precip_data_check999, TideDataDF)
     #print(f"Gross error entries found: {precip_gross_errors} in precipitation data, {tide_gross_errors} in tide data.")
 
-    # Checking whether the replacement worked
-    modified_precip_data, trace_replacements = replace_trace_precip_values(precip_data_check999)
-    #print(f"Trace values replaced: {trace_replacements}")
-
     # modified_precip_data.to_csv("Datasets/Modified_Hourly_Precipitation_Data_Fort_Myers_FL.csv", index=False) 
     
+    # modified_tide_data.to_csv("Datasets/Modified_Hourly_Tide_Data_Fort_Myers_FL.csv", index=False) 
     """ ----------------------------- Summary table with data quality checking results---------------------------- """
 
     ReplacedValuesDF( trace_replacements, precip_data_removed, precip_blanks, tide_blanks, precip_gross_errors , tide_gross_errors)
@@ -437,11 +606,16 @@ if __name__ == '__main__':
     # Original Precipitation Plot
     plot_precipitation( PrecipDataDF['HPCP'], 'Raw Precipitation Data', 'Raw Precipitation Data.png' )       
     
+    # Original Tide Plot
     plot_tide(TideDataDF['Verified (ft)'], 'Raw Tide Data', 'Raw Tide Data.png')
     
     # Original Precipitation vs. Precipitation - Post 999 Check
-    plot_check999(PrecipDataDF['HPCP'], precip_data_check999['HPCP'], 'Precipitation Check 999.99', 'Precipitation_check999.png' )
+    plot_check999(PrecipDataDF['HPCP'], precip_data_check999['HPCP'], 'Precipitation Check 999.99', 'Precipitation_Check999.png' )
     plot_precipitation(precip_data_check999['HPCP'],'Precipitation - Post 999 Check', 'Precipitation - Post 999 Check.png' )
+
+    # Precipitation - Post 999 Check vs. Precipitation - Post Trace Replacement
+    plot_trace( precip_data_check999['HPCP'] , precip_data_trace_replace['HPCP'] , 'Replace Trace Precipitation Values' , 'Precipitation_Trace_Replace.png' )
+    plot_precipitation(precip_data_trace_replace['HPCP'],'Replace Trace Precipitation Values', 'Precipitation - Post Trace Replace.png' )
 
     # Original vs. Post Blank Values Check (Both the files)
 
