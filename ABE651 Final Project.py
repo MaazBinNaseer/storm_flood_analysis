@@ -5,10 +5,10 @@ Created on Sun Apr  7 09:52:16 2024
 @author: miche
 @author2: maazy
 """
-#import geopandas as gpd
+import geopandas as gpd
 import matplotlib.pyplot as plt
-#import contextily as ctx
-#from shapely.geometry import Point
+import contextily as ctx
+from shapely.geometry import Point
 import pandas as pd
 from scipy import stats
 import numpy as np
@@ -263,17 +263,18 @@ def replace_trace_precip_values(precip_data):
 
     '''
     try:
-        # Identify rows where the Measurement Flag is 'T'
-        #trace_rows = precip_data['PRCP_ATTRIBUTES'] == 'T'
-        trace_rows = precip_data['PRCP_ATTRIBUTES'].isin(['T,,N'])
+        # Ensure 'PRCP_ATTRIBUTES' is a string and handle missing data
+        precip_data['PRCP_ATTRIBUTES'] = precip_data['PRCP_ATTRIBUTES'].astype(str)
+        mask = precip_data['PRCP_ATTRIBUTES'].str.startswith('T')
+        
+        # Filter out where mask is true
+        cleaned_data = precip_data[~mask]
+        trace_count = mask.sum()
 
-        # Count how many 'T' values are there
-        trace_count = trace_rows.sum()
+        print("Number of traces removed:", trace_count)
+        print("First few rows of cleaned data:", cleaned_data.head())
 
-        # Replace 'PRCP' values where 'Measurement Flag' is 'T' with 0.005 inches
-        precip_data.loc[trace_rows, 'PRCP'] = 0.005
-
-        return(precip_data, trace_count)
+        return cleaned_data, trace_count
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -305,8 +306,7 @@ def DataQuality_checkBlanks(precip_data, tide_data):
         # Check for blanks in tide data in 'Verified (ft)' column
         tide_blanks_count = tide_data['Verified (ft)'].isna().sum()
 
-
-        return ( precip_blanks_count, tide_blanks_count )
+        return (precip_blanks_count, tide_blanks_count )
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -393,11 +393,6 @@ def DataQuality_checkZScore(precip_data, tide_data):
         print(f"An error occurred: {e}")
         return (0, 0)  
 
-         
-    
-    
-    
-    
 """ ---------------------------- Summary table with data quality checking results ---------------------------- """
 
 def ReplacedValuesDF( Precip_trace, Precip_check9999, Precip_checkBlanks, Tide_checkBlanks, Precip_gross_errors , Tide_gross_errors, Precip_checkZscore, Tide_checkZscore):
@@ -418,12 +413,11 @@ def ReplacedValuesDF( Precip_trace, Precip_check9999, Precip_checkBlanks, Tide_c
     
     ReplacedValuesDF.loc["5. Z-Score", "Precipitation"] = Precip_checkZscore
     ReplacedValuesDF.loc["5. Z-Score", "Verified Tide"] = Tide_checkZscore
-    
-    
-    
+
     ReplacedValuesDF.to_csv('ReplacedValuesDF.txt', sep='\t', index=True)
     
     return(ReplacedValuesDF)
+
 """ ------------------------------------ Data Quality Graphical Analysis -------------------------------------- """
 
 def plot_precipitation( plotData , title , outFileName ):
@@ -537,12 +531,8 @@ def plot_trace( original_plotData , new_plotData , title , outFileName ):
     plt.legend(fontsize = 8, loc = "upper right") #legend label
     plt.title(title, fontsize = 20) #title of graph
     plt.savefig( outFileName )    
-    
-    
 
-    
-
-    
+ 
 "----------------------------------Plot the Map ---------------------------------------------------------------"
 
 def plot_latitude_longitudeMap(data_frame):
@@ -559,6 +549,9 @@ def plot_latitude_longitudeMap(data_frame):
     None.
 
     '''
+    if 'LATITUDE' not in data_frame.columns or 'LONGITUDE' not in data_frame.columns:
+        raise ValueError("DataFrame must contain 'LATITUDE' and 'LONGITUDE' columns.")
+
     # Create a GeoDataFrame from the latitude and longitude data
     gdf = gpd.GeoDataFrame(
         data_frame,
@@ -571,12 +564,40 @@ def plot_latitude_longitudeMap(data_frame):
 
     # Plotting
     fig, ax = plt.subplots(figsize=(10, 10))
-    gdf.plot(ax=ax, marker='o', color='red', markersize=50)
+    gdf.plot(ax=ax, marker='o', color='red', markersize=5)
 
     # Add basemap
-    ctx.add_basemap(ax)
+    ctx.add_basemap(ax, zoom=12)
     ax.set_axis_off()
     plt.savefig("MapDrawn.png")
+
+def main():
+    try:
+        # Assuming 'read_precip_data' and 'read_tide_data' are functions that load your data correctly
+        DailyPrecipDataDF_2003_2023 = read_precip_data("Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv")
+        TideDataDF_1998_2023 = read_tide_data("Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2023.csv")
+
+        if DailyPrecipDataDF_2003_2023 is None or TideDataDF_1998_2023 is None:
+            raise ValueError("Data loading failed, one of the data frames is None")
+
+        # Further data processing
+        precip_data_check9999, precip_data_removed = DataQuality_check9999(DailyPrecipDataDF_2003_2023)
+        if precip_data_check9999 is None:
+            raise ValueError("9999 check failed, resulting data is None")
+
+        precip_data_trace_replace, trace_replacements = replace_trace_precip_values(precip_data_check9999)
+        if precip_data_trace_replace is None:
+            raise ValueError("Trace replacement failed, resulting data is None")
+
+        # Example of plotting after checks
+        if precip_data_trace_replace is not None:
+            plot_trace(precip_data_check9999['PRCP'], precip_data_trace_replace['PRCP'], 'Replace Trace Precipitation Values', 'Precipitation_Trace_Replace.png')
+
+    except Exception as e:
+        print(f"An error occurred during processing: {e}")
+
+
+
 
 # the following condition checks whether we are running as a script, in which 
 # case run the test code, otherwise functions are being imported so do not.
@@ -585,22 +606,15 @@ def plot_latitude_longitudeMap(data_frame):
 if __name__ == '__main__':
     # File location of Daily precipitation file
     #DailyPrecipfileName = "Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv"
-    
-
-    
-   
-    
+    main()
     # File location of hourly precipitation file
-    #PrecipfileName = "Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv"
-
-    
+    # PrecipfileName = "Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv"
     
     # Create Pandas Dataframe that contains tide values from 1998 to 2013
     TideDataDF_1998_2023 = read_tide_data( "Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2023.csv")
     
     # Create Pandas Dataframe that contains daily precipitation values from 2003 to 2023
     DailyPrecipDataDF_2003_2023 = read_precip_data("Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv")
-    
     
     # Group Precipitation Data by Station
     precip_station_info( DailyPrecipDataDF_2003_2023 )
@@ -638,7 +652,7 @@ if __name__ == '__main__':
     
     """ ----------------------------- Data Quality Graphical Analysis Starts-------------------------------------- """
     # Original Precipitation Plot
-    #plot_precipitation( PrecipDataDF['PRCP'], 'Raw Precipitation Data', 'Raw Precipitation Data.png' )       
+    plot_precipitation( PrecipDataDF['PRCP'], 'Raw Precipitation Data', 'Raw Precipitation Data.png' )       
     
     # Original Tide Plot
     plot_tide(TideDataDF['Verified (ft)'], 'Raw Tide Data', 'Raw Tide Data.png')
@@ -648,17 +662,17 @@ if __name__ == '__main__':
     plot_precipitation(precip_data_check9999['PRCP'],'Precipitation - Post 9999 Check', 'Precipitation - Post 9999 Check.png' )
 
     # Precipitation - Post 999 Check vs. Precipitation - Post Trace Replacement
-    #plot_trace( precip_data_check9999['PRCP'] , precip_data_trace_replace['PRCP'] , 'Replace Trace Precipitation Values' , 'Precipitation_Trace_Replace.png' )
-    plot_precipitation(precip_data_trace_replace['PRCP'],'Replace Trace Precipitation Values', 'Precipitation - Post Trace Replace.png' )
+    plot_trace(precip_data_check9999['PRCP'] , precip_data_trace_replace['PRCP'] , 'Replace Trace Precipitation Values' , 'Precipitation_Trace_Replace.png' )
+    plot_precipitation(precip_data_trace_replace['PRCP'],'Replace Trace Precipitation Values', 'Precipitation - Post Trace Replace.png')
 
     # Original vs. Post Blank Values Check (Both the files)
 
     "----------------------------------Plot the Map ---------------------------------------------------------------"
     
-   # data_sample = pd.read_csv('Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv')
-   # unique_locs = data_sample.drop_duplicates(subset=['LATITUDE', 'LONGITUDE'])
+    data_sample = pd.read_csv('Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv')
+    unique_locs = data_sample.drop_duplicates(subset=['LATITUDE', 'LONGITUDE'])
 
-    # plot_latitude_longitudeMap(unique_locs)
+    plot_latitude_longitudeMap(unique_locs)
     
     '''# Combine yearly tide data into one .CSV file
     tide_fileName = {"Datasets/Hourly Tide Data/CO-OPS_8725520_1998.csv",

@@ -1,5 +1,0 @@
-	Precipitation	Verified Tide
-1. Replace Trace Values	2923	0
-2. 999.99	2	0
-3. Blanks	0	0
-4. Gross Error	1	0
