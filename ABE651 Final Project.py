@@ -142,7 +142,7 @@ def assign_season(date):
         #print('fall')
         return 'Fall'
     
-def precip_station_info( DataDF ):
+def precip_station_info( data_df ):
     '''
     This function groups the station information for all the precipitation 
     stations, including latitude, longitude, and elevation
@@ -156,62 +156,17 @@ def precip_station_info( DataDF ):
     df : The station info Pandas Dataframe grouped by station location
     
     '''
-    #Step 1) Create a blank dataframe with station info
-    station_info_df = pd.DataFrame(columns=["Station", "Latitude", "Longitude", "Elevation"])
-    #print(df)
+    # Convert index to datetime if not already
+    data_df.index = pd.to_datetime(data_df.index)
+    
+    # Assign season for each row
+    data_df['SEASON'] = data_df.index.to_series().apply(assign_season)
+    
+    # Aggregate precipitation by season and station
+    seasonal_precip = data_df.groupby(['STATION', 'SEASON'])['PRCP'].sum().reset_index()
+    
+    return seasonal_precip
 
-    # Step 1) Organize by Station # in DataDF Dataframe using the Grouby Method
-    precip_data_df = DataDF.groupby('STATION')
-    #print(DataDF)
-    
-    # Annual Average Total Water Depth(mm)
-    # Step 1) Populate Station Info Dataframe
-    station_info_df["Latitude"]= precip_data_df['LATITUDE'].mean()
-    station_info_df["Longitude"]= precip_data_df['LONGITUDE'].mean()
-    station_info_df["Elevation"]= precip_data_df['ELEVATION'].mean()
-    
-    #print(df)
-    
-    # Seasons
-    # Step 1) Resample maximum daily precipitation by month
-    seasonal_resample = precip_data_df['PRCP'].resample("MS").max()
-    seasonal_df = pd.DataFrame(seasonal_resample)
-    seasonal_df.reset_index(inplace=True) # removes the index
-    seasonal_df['Date'] = pd.to_datetime(seasonal_df['DATE']) # Convert 'Date' column into panda date format
-    seasonal_df.set_index('Date', inplace=True) # index the 'Date' column
-    print(seasonal_df)
-    
-    # Step 2) Create a new column in seasonal_df DF to assign seasons for each date
-    seasonal_df['Season'] = seasonal_df.index.map(assign_season)
-    print("Seasonal DF:", seasonal_df)
-
-    # Step 3) Initialize dictionaries to hold maximum precipitation values for each station
-    seasonal_precip = {'Winter': {}, 'Spring': {}, 'Summer': {}, 'Fall': {}}
-
-    # Step 4) Loop through each station and season to compute annual seasonal average Total VWC
-    for station in station_info_df['Station'].unique():
-        print("Station Info", station_info_df)
-        station_data = seasonal_df[seasonal_df['STATION'] == station]
-        print(station_data)
-        
-        if not station_data.empty: 
-            for season in ['Winter', 'Spring', 'Summer', 'Fall']: 
-                season_data = station_data[station_data['Season'] == season] 
-                max_seasonal_precip = round(season_data['PRCP'].max(), 4) 
-                seasonal_precip[season][station] = max_seasonal_precip 
-                  
-    
-    # Step 5) Add the maximum seasonal precipitation into the station info df     
-    station_info_df.loc[:,'Winter Precipitation (in.)'] = seasonal_precip['Winter']
-    station_info_df.loc[:,'Spring Precipitation (in.)'] = seasonal_precip['Spring']
-    station_info_df.loc[:,'Summer Precipitation (in.)'] = seasonal_precip['Summer']
-    station_info_df.loc[:,'Fall Precipitation (in.)'] = seasonal_precip['Fall']
-    station_info_df.reset_index(inplace=True) # removes the index and returns it as a column in the df
-    
-    print(station_info_df.head(10))
-    print(station_info_df.tail(10))
-    
-    return station_info_df
 """ ----------------------------- Data Quality Checks -------------------------------- """
 
 def DataQuality_check9999(precip_data):
@@ -532,7 +487,36 @@ def plot_trace( original_plotData , new_plotData , title , outFileName ):
     plt.title(title, fontsize = 20) #title of graph
     plt.savefig( outFileName )    
 
- 
+def plot_seasonaltrends(seasonal_precip):
+    '''
+    Plots the seasonal trends of precipitation data and saves the plot to a PNG file.
+    
+    Parameters:
+    ----------
+    seasonal_precip : DataFrame
+        DataFrame containing the total precipitation for each station and season.
+    '''
+    # Prepare the plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Plot data
+    for season in ['Winter', 'Spring', 'Summer', 'Fall']:
+        # Filter data for the season
+        season_data = seasonal_precip[seasonal_precip['SEASON'] == season]
+        # Calculate average precipitation per season across all stations
+        average_precip = season_data.groupby('SEASON')['PRCP'].mean()
+        ax.bar(season, average_precip.values, label=season)
+
+    # Set plot details
+    ax.set_xlabel('Season')
+    ax.set_ylabel('Average Precipitation (mm)')
+    ax.set_title('Average Seasonal Precipitation Across All Stations')
+    ax.legend(title='Season')
+
+    # Save the figure
+    plt.savefig('seasonal_trends.png', format='png')
+    plt.close(fig)  # Close the plot figure to free up memory
+    
 "----------------------------------Plot the Map ---------------------------------------------------------------"
 
 def plot_latitude_longitudeMap(data_frame):
@@ -571,30 +555,30 @@ def plot_latitude_longitudeMap(data_frame):
     ax.set_axis_off()
     plt.savefig("MapDrawn.png")
 
-def main():
-    try:
-        # Assuming 'read_precip_data' and 'read_tide_data' are functions that load your data correctly
-        DailyPrecipDataDF_2003_2023 = read_precip_data("Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv")
-        TideDataDF_1998_2023 = read_tide_data("Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2023.csv")
+# def main():
+#     try:
+#         # Assuming 'read_precip_data' and 'read_tide_data' are functions that load your data correctly
+#         DailyPrecipDataDF_2003_2023 = read_precip_data("Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv")
+#         TideDataDF_1998_2023 = read_tide_data("Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2023.csv")
 
-        if DailyPrecipDataDF_2003_2023 is None or TideDataDF_1998_2023 is None:
-            raise ValueError("Data loading failed, one of the data frames is None")
+#         if DailyPrecipDataDF_2003_2023 is None or TideDataDF_1998_2023 is None:
+#             raise ValueError("Data loading failed, one of the data frames is None")
 
-        # Further data processing
-        precip_data_check9999, precip_data_removed = DataQuality_check9999(DailyPrecipDataDF_2003_2023)
-        if precip_data_check9999 is None:
-            raise ValueError("9999 check failed, resulting data is None")
+#         # Further data processing
+#         precip_data_check9999, precip_data_removed = DataQuality_check9999(DailyPrecipDataDF_2003_2023)
+#         if precip_data_check9999 is None:
+#             raise ValueError("9999 check failed, resulting data is None")
 
-        precip_data_trace_replace, trace_replacements = replace_trace_precip_values(precip_data_check9999)
-        if precip_data_trace_replace is None:
-            raise ValueError("Trace replacement failed, resulting data is None")
+#         precip_data_trace_replace, trace_replacements = replace_trace_precip_values(precip_data_check9999)
+#         if precip_data_trace_replace is None:
+#             raise ValueError("Trace replacement failed, resulting data is None")
 
-        # Example of plotting after checks
-        if precip_data_trace_replace is not None:
-            plot_trace(precip_data_check9999['PRCP'], precip_data_trace_replace['PRCP'], 'Replace Trace Precipitation Values', 'Precipitation_Trace_Replace.png')
+#         # Example of plotting after checks
+#         if precip_data_trace_replace is not None:
+#             plot_trace(precip_data_check9999['PRCP'], precip_data_trace_replace['PRCP'], 'Replace Trace Precipitation Values', 'Precipitation_Trace_Replace.png')
 
-    except Exception as e:
-        print(f"An error occurred during processing: {e}")
+#     except Exception as e:
+#         print(f"An error occurred during processing: {e}")
 
 
 
@@ -606,7 +590,7 @@ def main():
 if __name__ == '__main__':
     # File location of Daily precipitation file
     #DailyPrecipfileName = "Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv"
-    main()
+    # main()
     # File location of hourly precipitation file
     # PrecipfileName = "Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv"
     
@@ -617,7 +601,9 @@ if __name__ == '__main__':
     DailyPrecipDataDF_2003_2023 = read_precip_data("Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv")
     
     # Group Precipitation Data by Station
-    precip_station_info( DailyPrecipDataDF_2003_2023 )
+    seasonal_precip = precip_station_info( DailyPrecipDataDF_2003_2023 )
+    plot_seasonaltrends(seasonal_precip)
+    
     
     # Clip Precipitation and Tide Dataframes to given time periods (January 2004 to December 2023)
     PrecipDataDF = ClipData( DailyPrecipDataDF_2003_2023 , "2005-01-01", "2023-12-31")
