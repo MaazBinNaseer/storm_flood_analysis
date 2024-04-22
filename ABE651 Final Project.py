@@ -5,14 +5,17 @@ Created on Sun Apr  7 09:52:16 2024
 @author: miche
 @author2: maazy
 """
-import geopandas as gpd
-import matplotlib.pyplot as plt
-import contextily as ctx
-from shapely.geometry import Point
-import pandas as pd
-from scipy import stats
-import numpy as np
+# Import required modules
+import pandas as pd # For reading .CSV files and creating dataframes
 import os  #os = operating system, which will be used to open files
+import numpy as np # For conducting data checking and analysis
+from scipy import stats # For conducting data checking and analysis
+import matplotlib.pyplot as plt # For creating plots
+
+ # For creating the map
+import geopandas as gpd
+from shapely.geometry import Point 
+import contextily as ctx 
 
     
 def read_precip_data( PrecipfileName ):
@@ -150,9 +153,20 @@ def precip_station_info( data_df ):
     station_info['Longitude'] = data_df.groupby(["STATION"])['LONGITUDE'].mean()
     station_info['Elevation'] = data_df.groupby(["STATION"])['ELEVATION'].mean()
     
+    # Elevation Analysis
+    '''avg_elevation = np.mean(station_info['Elevation'])
+    max_elevation = np.max(station_info['Elevation'])
+    min_elevation = np.min(station_info['Elevation'])
+    
+    
+    print("The average elevation of all stations is:", avg_elevation)
+    print("The minimum elevation of all stations is:", max_elevation)
+    print("The maximum elevation of all stations is:", min_elevation)'''
+
     #print("Station Info:\n", station_info_DF)
     station_info.to_csv('Precipitation_Station_Info.csv', sep=',')
-
+    
+    
     return station_info
 
 def assign_season(date):
@@ -204,7 +218,7 @@ def seasonal_precip( data_df ):
     data_df['SEASON'] = data_df.index.to_series().apply(assign_season)
     
     # Aggregate precipitation by season and station
-    seasonal_precip = data_df.groupby(['STATION', 'SEASON'])['PRCP'].mean().reset_index()
+    seasonal_precip = data_df.groupby(['STATION', 'SEASON'])['PRCP'].sum().reset_index()
     
     return seasonal_precip
 
@@ -277,9 +291,9 @@ def replace_trace_precip_values(precip_data):
 
 def DataQuality_checkBlanks(precip_data, tide_data):
     '''
-    This function checks for checks for blank (NaN or empty) entries 
-    in specific columns in precipitation and tide data files,
-    and returns the count of such blanks for each file.
+    This function checks for blank (NaN or empty) entries in specific columns 
+    in precipitation and tide data files, and returns the count of such 
+    blanks for each file.
 
     Parameters
     ----------
@@ -330,14 +344,14 @@ def DataQuality_checkGross(precip_data, tide_data):
     '''
     try:
         # Check for gross errors in precipitation data
-        # Gross error defined as values outside the range 0 inches to 4 inches
+        # Gross error defined as values outside the range 0 inches to 25 inches
         precip_data['PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')  # Ensure data is float
-        precip_gross_errors = precip_data[(precip_data['PRCP'] < 0) | (precip_data['PRCP'] > 6)].shape[0]
+        precip_gross_errors = precip_data[(precip_data['PRCP'] < 0) | (precip_data['PRCP'] > 25)].shape[0]
 
         # Check for gross errors in tide data
-        # Gross error defined as values outside the range -3 feet to 3 feet
+        # Gross error defined as values outside the range -4 feet to 4 feet
         tide_data['Verified (ft)'] = pd.to_numeric(tide_data['Verified (ft)'], errors='coerce')  # Ensure data is float
-        tide_gross_errors = tide_data[(tide_data['Verified (ft)'] < -3) | (tide_data['Verified (ft)'] > 3)].shape[0]
+        tide_gross_errors = tide_data[(tide_data['Verified (ft)'] < -4) | (tide_data['Verified (ft)'] > 4)].shape[0]
 
         return (precip_gross_errors, tide_gross_errors)
 
@@ -443,7 +457,6 @@ def plot_precipitation( plotData , title , outFileName ):
     ax.set_xlabel('Date', fontsize = 15)
     ax.set_ylabel('Precipitation (in)', fontsize = 15) #y-axis label
     ax.set_title(title, fontsize = 20) #title of graph
-    plt.legend(fontsize = 8, loc = "upper right") #legend label
     
     # Save the figure
     plt.savefig( outFileName )
@@ -478,13 +491,12 @@ def plot_tide( plotData , title , outFileName ):
     ax.set_xlabel('Date', fontsize = 15)
     ax.set_ylabel('Tide (ft)', fontsize = 15) #y-axis label
     ax.set_title(title, fontsize = 20) #title of graph
-    plt.legend(fontsize = 8, loc = "upper right") #legend label
     
     # Save the figure
     plt.savefig( outFileName )
     plt.close(fig)  # Close the plot figure to free up memory 
     
-def plot_check9999( original_plotData , new_plotData , title , outFileName ):
+def plot_checked_data( original_plotData , new_plotData , y_label, title , outFileName ):
     '''
     This function plots each precipitation dataset before and after the check999
     correction has been made and saves the plot to a PNG file.
@@ -509,56 +521,18 @@ def plot_check9999( original_plotData , new_plotData , title , outFileName ):
     fig, ax = plt.subplots(figsize=(10, 6))
     
     # Plot data
-    original_plotData.plot(use_index=True, color = 'b', label = 'Original Precipitation')
-    new_plotData.plot(use_index=True, color = 'r', label = 'Removed 9999')
+    original_plotData.plot(use_index=True, color='g', label = 'Original Data')
+    new_plotData.plot(use_index=True, color='b', alpha=0.75, label = 'Checked Data')
     
     # Set plot details
     ax.set_xlabel('Date', fontsize = 15)
-    ax.set_ylabel('Precipitation (in)', fontsize = 15) #y-axis label
+    ax.set_ylabel(y_label, fontsize = 15) #y-axis label
     ax.set_title(title, fontsize = 20) #title of graph
     plt.legend(fontsize = 8, loc = "upper right") #legend label
     
     # Save the figure
     plt.savefig( outFileName )
     plt.close(fig)  # Close the plot figure to free up memory 
-    
-def plot_trace( original_plotData , new_plotData , title , outFileName ):
-    '''
-    This function plots each precipitation dataset before and after the trace
-    correction has been made and saves the plot to a PNG file.
-
-    Parameters
-    ----------
-    original_plotData : Dataframe
-        The raw data in a Pandas Dataframe.
-    new_plotData : Dataframe
-        The corrected data in a Pandas Dataframe.
-    title : str
-        Title of the plot
-    outFileName : str
-        Title of the output .PNG file name
-
-    Returns
-    -------
-    None.
-
-    '''
-    # Prepare the plot
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # Plot data
-    original_plotData.plot(use_index=True, color = 'b', label = 'Original Precipitation')
-    new_plotData.plot(use_index=True, color = 'r', label = 'Replaced Trace Values')
-    
-    # Set plot details
-    ax.set_xlabel('Date', fontsize = 15)
-    ax.set_ylabel('Precipitation (in)', fontsize = 15) #y-axis label
-    ax.set_title(title, fontsize = 20) #title of graph
-    plt.legend(fontsize = 8, loc = "upper right") #legend label
-    
-    # Save the figure
-    plt.savefig( outFileName )
-    plt.close(fig)  # Close the plot figure to free up memory
 
 def plot_seasonaltrends(seasonal_precip, outFileName):
     '''
@@ -578,14 +552,13 @@ def plot_seasonaltrends(seasonal_precip, outFileName):
         # Filter data for the season
         season_data = seasonal_precip[seasonal_precip['SEASON'] == season]
         # Calculate average precipitation per season across all stations
-        average_precip = season_data.groupby('SEASON')['PRCP'].mean()
+        average_precip = season_data.groupby('SEASON')['PRCP'].sum()
         ax.bar(season, average_precip.values, label=season)
 
     # Set plot details
-    ax.set_xlabel('Season')
-    ax.set_ylabel('Average Precipitation (in)')
-    ax.set_title('Average Seasonal Precipitation Across All Stations')
-    ax.legend(title='Season')
+    ax.set_xlabel('Season', fontsize = 15)
+    ax.set_ylabel('Precipitation (in)', fontsize = 15)
+    ax.set_title('Sum of Seasonal Precipitation Across All Stations', fontsize = 20)
 
     # Save the figure
     plt.savefig( outFileName , format='png')
@@ -618,7 +591,7 @@ def plot_mean_monthly_precip( DataDF, station, outFileName):
     
     # Find the Average Monthly Precipitation
     plotData['Average Monthly Flow'] = DataDF.groupby(DataDF.index.month)['PRCP'].mean(numeric_only=True)
-    
+
     # Plot data
     plotData['Average Monthly Flow'].plot(kind="line", label = station) 
     
@@ -631,9 +604,50 @@ def plot_mean_monthly_precip( DataDF, station, outFileName):
     
     # Save the figure
     plt.savefig( outFileName )
-    plt.close()  # Close the plot figure to free up memory
+    #plt.close()  # Close the plot figure to free up memory
     
-def plot_max_monthly_tide( DataDF , outFileName):
+def plot_extreme_precip( DataDF, station, outFileName):
+    '''
+    This function find the days where daily precipitation > 4 in, creates a plot, and 
+    saves the plot to a PNG file.
+
+    Parameters
+    ----------
+    DataDF : Dataframe
+        The Precipitation data in a Pandas Dataframe.
+    station : str
+        Prcipitation Station Name.
+    outFileName : str
+        Title of the output .PNG file name
+
+    Returns
+    -------
+    None.
+
+    '''
+    # Filter dataframe by station
+    DataDF = DataDF[(DataDF["STATION"] == station)]
+    
+    # create empty dataframe "plotData"
+    plotData = pd.DataFrame()
+    
+    # Filter the values of daily precipitation > 5 in
+    plotData = DataDF.loc[DataDF['PRCP'] > 4].reset_index()
+
+    # Plot data
+    plt.scatter(plotData['DATE'], plotData['PRCP'], label = station) 
+    
+    # Set plot details
+    plt.xlabel('Date', fontsize = 15)
+    plt.ylabel('Precipitation (in)', fontsize = 15) #y-axis label
+    plt.title("Daily Precipitation > 4 in. at All Stations", fontsize = 20) #title of graph
+    plt.legend(fontsize = 8, bbox_to_anchor=(1.04, 1), borderaxespad=0)
+
+    # Save the figure
+    plt.savefig( outFileName )
+    #plt.close()  # Close the plot figure to free up memory
+    
+def plot_max_daily_tide( DataDF , outFileName):
     '''
     This function calculates the maximum monthly tide, creates a plot, and 
     saves the plot to a PNG file.
@@ -649,30 +663,28 @@ def plot_max_monthly_tide( DataDF , outFileName):
     -------
     None.
 
-    '''
+    '''    
     # create empty dataframe "plotData"
     plotData = pd.DataFrame(columns=['Max Tide'])
     
     # Find the Maximum Monthly Tide
-    plotData['Max Tide'] = DataDF.groupby(DataDF.index.month)['Verified (ft)'].max(numeric_only=True)
+    plotData['Max Tide'] = DataDF['Verified (ft)'].resample("D").max(numeric_only=True)
     print(plotData['Max Tide'])
     # Prepare the plot
     fig, ax = plt.subplots(figsize=(10, 6))
     
     # Plot data
-    plotData['Max Tide'] = pd.to_numeric(plotData, errors='coerce')  # Ensure data is float
     plotData.plot(use_index=True, color = 'b')
     
     # Set plot details
     plt.xlabel('Date', fontsize = 15)
-    plt.ylabel('Verified (in)', fontsize = 15) #y-axis label
-    plt.title("Maximum Monthly Tide", fontsize = 20) #title of graph
-    plt.legend(fontsize = 8, loc = "upper right") #legend label
+    plt.ylabel('Tide (ft.)', fontsize = 15) #y-axis label
+    plt.title("Maximum Daily Tide", fontsize = 20) #title of graph
     
     # Save the figure
     plt.savefig( outFileName )
     #plt.close(fig)  # Close the plot figure to free up memory
-
+    
 "----------------------------------Plot the Map ---------------------------------------------------------------"
 
 def plot_latitude_longitudeMap(data_frame):
@@ -804,13 +816,12 @@ if __name__ == '__main__':
     
     """ -----------------------------  Graphical Data Analysis -------------------------------------- """
 
-    # Original Precipitation vs. Precipitation - Post 999 Check
-    plot_precipitation(precip_data_check9999['PRCP'],'Precipitation - Post 9999 Check', 'Figures/Precipitation - Post 9999 Check.png' )
-
-    # Precipitation - Post 999 Check vs. Precipitation - Post Trace Replacement
-    plot_trace(precip_data_check9999['PRCP'] , precip_data_trace_replace['PRCP'] , 'Replace Trace Precipitation Values' , 'Figures/Precipitation_Trace_Replace.png' )
-    plot_precipitation(precip_data_trace_replace['PRCP'],'Replace Trace Precipitation Values', 'Figures/Precipitation - Post Trace Replace.png')
-
+    # Original Precipitation vs. Precipitation - Post Trace Replacement
+    #plot_checked_data( PrecipDataDF['PRCP'] , precip_data_trace_replace['PRCP'] , 'Precipitation (in.)', 'Precipitation - Trace Replace' , 'Figures/Precipitation_Trace Replace.png' )
+   
+    # Original Precipitation vs. Precipitation - Post 9999 Check
+    #plot_checked_data( PrecipDataDF['PRCP'] , precip_data_check9999['PRCP'] , 'Precipitation (in.)', 'Precipitation - 9999 Check' , 'Figures/Precipitation_9999 Check.png' )
+    
     # Original vs. Post Blank Values Check (Both the files)
     
     """ ----------------------------- Data Analysis -------------------------------------- """
@@ -823,15 +834,14 @@ if __name__ == '__main__':
     # Plot mean monthly precipitation at each station
     for station in precip_station_info_df.index:
         plot_mean_monthly_precip( PrecipDataDF , station, 'Figures/Average Monthly Precipitation_All Stations.png')
-    
+        
+    #for station in precip_station_info_df.index:
+    #    plot_extreme_precip(  PrecipDataDF , station, 'Figures/Extreme Precipitation_All Stations.png' )
+
     # Plot maximum monthly tide
-    #print(TideDataDF)
-    #plot_max_monthly_tide( TideDataDF , 'Figures/Maximum Monthly Tide Data.png')
-
+    plot_max_daily_tide( TideDataDF , 'Figures/Maximum Daily Tide Data.png')
+        
     "----------------------------------Plot the Map ---------------------------------------------------------------"
-    # Removed unique_locs, because I created a precip_station_info_df to summarize the Longitude, Latitude, and Elevations of each precip station
-    #unique_locs = DailyPrecipDataDF_2003_2023.drop_duplicates(subset=['LATITUDE', 'LONGITUDE']) 
-
     plot_latitude_longitudeMap(precip_station_info_df)
     
     "----------------------------------Combine yearly tide data into one .CSV file---------------------------------------------------------------"
