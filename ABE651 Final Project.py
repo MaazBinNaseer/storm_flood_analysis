@@ -167,7 +167,7 @@ def precip_station_info( data_df ):
     
     return seasonal_precip
 
-""" ----------------------------- Data Quality Checks -------------------------------- """
+""" ----------------------------- Data Quality Checks ----------------------------------------------------------- """
 
 def DataQuality_check9999(precip_data):
     '''
@@ -188,9 +188,11 @@ def DataQuality_check9999(precip_data):
         A tuple containing the counts of removed 9999 entries from precipitation.
 
     '''
+   
+    precip_data = precip_data.copy()
     # Convert data to float to avoid string comparison issues
-    precip_data['PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
-    
+    precip_data.loc[:, 'PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
+
     # Count and remove 999.99s in precipitation data
     precip_original_count = len(precip_data)
     precip_data_cleaned = precip_data[precip_data['PRCP'] != 9999]
@@ -226,10 +228,7 @@ def replace_trace_precip_values(precip_data):
         cleaned_data = precip_data[~mask]
         trace_count = mask.sum()
 
-        print("Number of traces removed:", trace_count)
-        print("First few rows of cleaned data:", cleaned_data.head())
-
-        return cleaned_data, trace_count
+        return (cleaned_data, trace_count)
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -267,7 +266,6 @@ def DataQuality_checkBlanks(precip_data, tide_data):
         print(f"An error occurred: {e}")
         return (0, 0)
     
-
 def DataQuality_checkGross(precip_data, tide_data):
     '''
     This function checks for gross errors in specific columns based on 
@@ -291,7 +289,7 @@ def DataQuality_checkGross(precip_data, tide_data):
     try:
         # Check for gross errors in precipitation data
         # Gross error defined as values outside the range 0 inches to 4 inches
-        precip_data['PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')  # Ensure data is float
+        precip_data.loc[:, 'PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
         precip_gross_errors = precip_data[(precip_data['PRCP'] < 0) | (precip_data['PRCP'] > 6)].shape[0]
 
         # Check for gross errors in tide data
@@ -323,26 +321,23 @@ def DataQuality_checkZScore(precip_data, tide_data):
     None.
 
     '''
-    #threshold_z = 2
     try:
-        # Check for outliers in precipitation data
-        precip_data['PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')  # Ensure data is float
-        z = np.abs(stats.zscore(precip_data['PRCP']))
-        
-        print("Z Score Test:", z) 
-        #outlier_indices = np.where(z > threshold_z)[0]
-        #no_outliers = precip_data.drop(outlier_indices)
-        #print("Original DataFrame Shape:", precip_data.shape)
-        #print("DataFrame Shape after Removing Outliers:", precip_data.shape)
-    
-        # Check for outliers in tide data
-        # Gross error defined as values outside the range -3 feet to 3 feet
-        tide_data['Verified (ft)'] = pd.to_numeric(tide_data['Verified (ft)'], errors='coerce')  # Ensure data is float
-        modified_precip_data = 1
-        modified_tide_data = 1
-        precip_Zscore_count = 1
-        tide_Zscore_count = 1
-        return (modified_precip_data, modified_tide_data, precip_Zscore_count, tide_Zscore_count)
+        precip_data = precip_data.copy()
+        # Check and count outliers in precipitation data
+        precip_data['PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
+        precip_in_range = precip_data[(precip_data['PRCP'] >= 0) & (precip_data['PRCP'] <= 25)]
+        z_precip = np.abs(stats.zscore(precip_in_range['PRCP'].dropna()))
+        precip_outliers = np.where(z_precip > 3)[0]  # Using 3 as a threshold for Z-score
+        precip_Zscore_count = len(precip_outliers)
+
+        # Check and count outliers in tide data
+        tide_data['Verified (ft)'] = pd.to_numeric(tide_data['Verified (ft)'], errors='coerce')
+        tide_in_range = tide_data[(tide_data['Verified (ft)'] >= -4) & (tide_data['Verified (ft)'] <= 4)]
+        z_tide = np.abs(stats.zscore(tide_in_range['Verified (ft)'].dropna()))
+        tide_outliers = np.where(z_tide > 3)[0]  # Using 3 as a threshold for Z-score
+        tide_Zscore_count = len(tide_outliers)
+
+        return (precip_Zscore_count, tide_Zscore_count)
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -581,60 +576,45 @@ def plot_latitude_longitudeMap(data_frame):
 #         print(f"An error occurred during processing: {e}")
 
 
-
-
 # the following condition checks whether we are running as a script, in which 
 # case run the test code, otherwise functions are being imported so do not.
 # put the main routines from your code after this conditional check.
 
 if __name__ == '__main__':
-    # File location of Daily precipitation file
-    #DailyPrecipfileName = "Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv"
+   
     # main()
-    # File location of hourly precipitation file
-    # PrecipfileName = "Datasets/Hourly Precipitation Data/Hourly Precipitation Data_Fort Myers_FL.csv"
-    
     # Create Pandas Dataframe that contains tide values from 1998 to 2013
-    TideDataDF_1998_2023 = read_tide_data( "Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2023.csv")
+    TideDataDF_1998_2023 = read_tide_data("Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2023.csv")
     
     # Create Pandas Dataframe that contains daily precipitation values from 2003 to 2023
     DailyPrecipDataDF_2003_2023 = read_precip_data("Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv")
     
     # Group Precipitation Data by Station
-    seasonal_precip = precip_station_info( DailyPrecipDataDF_2003_2023 )
+    seasonal_precip = precip_station_info(DailyPrecipDataDF_2003_2023)
     plot_seasonaltrends(seasonal_precip)
     
-    
     # Clip Precipitation and Tide Dataframes to given time periods (January 2004 to December 2023)
-    PrecipDataDF = ClipData( DailyPrecipDataDF_2003_2023 , "2005-01-01", "2023-12-31")
-    TideDataDF = ClipData( TideDataDF_1998_2023, "2004-01-01", "2023-12-31")
+    PrecipDataDF = ClipData(DailyPrecipDataDF_2003_2023, "2005-01-01", "2023-12-31")
+    TideDataDF = ClipData(TideDataDF_1998_2023, "2004-01-01", "2023-12-31")
         
-    # 1. Data Quality Check for 9999 Values in Precipitation Data
-    precip_data_check9999, precip_data_removed =  DataQuality_check9999(PrecipDataDF)
-    #print(f"Removed {precip_data_removed} entries from precipitation data")
-    
-    # 2. Replace trace precipitation values
+    # Data Quality Checks and processing
+    precip_data_check9999, precip_data_removed = DataQuality_check9999(PrecipDataDF)
     precip_data_trace_replace, trace_replacements = replace_trace_precip_values(precip_data_check9999)
-    #print(f"Trace values replaced: {trace_replacements}")
-    
-    # 3. Data Quality Check for Blank Values in (Both the files)
-    precip_blanks, tide_blanks = DataQuality_checkBlanks(precip_data_check9999, TideDataDF)
-    #print(f"Blank entries found: {precip_blanks} in precipitation data, {tide_blanks} in tide data.")
+    precip_blanks, tide_blanks = DataQuality_checkBlanks(precip_data_trace_replace, TideDataDF)
+    precip_gross_errors, tide_gross_errors = DataQuality_checkGross(precip_data_trace_replace, TideDataDF)
+    precip_Zscore_count, tide_Zscore_count = DataQuality_checkZScore(precip_data_trace_replace, TideDataDF) 
 
-    # 4. Data Quality Check for Gross Values in (Both the files)
-    precip_gross_errors, tide_gross_errors = DataQuality_checkGross(precip_data_check9999, TideDataDF)
-    #print(f"Gross error entries found: {precip_gross_errors} in precipitation data, {tide_gross_errors} in tide data.")
+    # Export cleaned data to CSV files
+    precip_data_trace_replace.to_csv('Cleaned_Precipitation_Data.csv', index=False)
+    print("Cleaned precipitation data has been saved to 'Cleaned_Precipitation_Data.csv'.")
+
+    TideDataDF.to_csv('Cleaned_Tide_Data.csv', index=False)
+    print("Cleaned tide data has been saved to 'Cleaned_Tide_Data.csv'.")
 
 
-    #5. Data Quality Check for Outlier Values in (Both the files)
-    modified_precip_data, modified_tide_data, precip_Zscore_count, tide_Zscore_count = DataQuality_checkZScore(precip_data_check9999, TideDataDF)    
-    
-    # modified_precip_data.to_csv("Datasets/Modified_Hourly_Precipitation_Data_Fort_Myers_FL.csv", index=False) 
-    
-    # modified_tide_data.to_csv("Datasets/Modified_Hourly_Tide_Data_Fort_Myers_FL.csv", index=False) 
     """ ----------------------------- Summary table with data quality checking results---------------------------- """
 
-    #ReplacedValuesDF( trace_replacements, precip_data_removed, precip_blanks, tide_blanks, precip_gross_errors , tide_gross_errors )
+    ReplacedValuesDF( trace_replacements, precip_data_removed, precip_blanks, tide_blanks, precip_gross_errors , tide_gross_errors, precip_Zscore_count, tide_Zscore_count)
     
     """ ----------------------------- Data Quality Graphical Analysis Starts-------------------------------------- """
     # Original Precipitation Plot
@@ -660,6 +640,14 @@ if __name__ == '__main__':
 
     plot_latitude_longitudeMap(unique_locs)
     
+
+
+
+
+
+
+
+"""-------------------------------------Yearly/Hourly Tide data Combined -------------------------------------------------------"""
     '''# Combine yearly tide data into one .CSV file
     tide_fileName = {"Datasets/Hourly Tide Data/CO-OPS_8725520_1998.csv",
                      "Datasets/Hourly Tide Data/CO-OPS_8725520_1999.csv",
@@ -691,4 +679,4 @@ if __name__ == '__main__':
     for file in tide_fileName:
         tideDF = read_tide_data( file )
         modified_tide_data = modified_tide_data_csv( tideDF , "Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2023.csv")'''
-    
+ 
