@@ -8,6 +8,7 @@ Created on Sun Apr  7 09:52:16 2024
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import contextily as ctx
+from matplotlib.dates import DateFormatter
 from shapely.geometry import Point
 import pandas as pd
 from scipy import stats
@@ -662,7 +663,7 @@ def plot_max_daily_tide( DataDF , outFileName):
     
     # Find the Maximum Monthly Tide
     plotData['Max Tide'] = DataDF['Verified (ft)'].resample("D").max(numeric_only=True)
-    print(plotData['Max Tide'])
+    # print(plotData['Max Tide'])
     # Prepare the plot
     fig, ax = plt.subplots(figsize=(10, 6))
     
@@ -679,22 +680,35 @@ def plot_max_daily_tide( DataDF , outFileName):
     #plt.close(fig)  # Close the plot figure to free up memory
 
 def plot_3Dprecip_rolling_sum( DataDF , outFileName ):
-    # create empty dataframe "plotData"
-    df = pd.DataFrame()
-    df['Rolling Sum'] = DataDF.groupby('STATION')['PRCP'].rolling(window=3).sum()
-    df.reset_index()
-    
-    print(df)
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    df.groupby('STATION')['Rolling Sum'].plot(legend=True)
-    plt.xlabel('Date', fontsize = 15)
-    plt.ylabel('Precipitation (in)', fontsize = 15) #y-axis label
-    plt.title("3-day Rolling Precipitation Sum at All Stations", fontsize = 20) #title of graph
-    plt.legend(fontsize = 8, bbox_to_anchor=(1.04, 1), borderaxespad=0)
+    # Perform the rolling sum, then reset the index to turn the MultiIndex into columns
+    rolling_df = DataDF.groupby('STATION')['PRCP'].rolling(window=3).sum().reset_index()
 
-    # Save the figure
-    plt.savefig( outFileName )
+    # Rename the columns to reflect the structure after reset_index()
+    rolling_df.columns = ['STATION', 'DATE', 'Rolling Sum']
+
+    # Drop NaN values resulting from the rolling calculation
+    rolling_df = rolling_df.dropna(subset=['Rolling Sum'])
+
+    # Ensure 'DATE' is in datetime format
+    rolling_df['DATE'] = pd.to_datetime(rolling_df['DATE'])
+
+    # Start plotting
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for station, group in rolling_df.groupby('STATION'):
+        ax.plot(group['DATE'], group['Rolling Sum'], label=station)
+
+    # Formatting the x-axis dates
+    ax.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d'))
+    fig.autofmt_xdate()
+
+    # Setting the labels and title
+    plt.xlabel('Date', fontsize=15)
+    plt.ylabel('Precipitation (in)', fontsize=15)
+    plt.title("3-day Rolling Precipitation Sum at All Stations", fontsize=20)
+    plt.legend(fontsize=8, bbox_to_anchor=(1.04,1), borderaxespad=0)
+
+    # Saving the figure
+    plt.savefig(outFileName, bbox_inches='tight')
     
     "----------------------------------Plot the Map ---------------------------------------------------------------"
 
@@ -736,33 +750,6 @@ def plot_latitude_longitudeMap(data_frame):
     plt.savefig("MapDrawn.png")
     plt.close(fig)  # Close the plot figure to free up memory
 
-# def main():
-#     try:
-#         # Assuming 'read_precip_data' and 'read_tide_data' are functions that load your data correctly
-#         DailyPrecipDataDF_2003_2023 = read_precip_data("Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv")
-#         TideDataDF_1998_2023 = read_tide_data("Datasets/Hourly Tide Data/CO-OPS_8725520_1998-2023.csv")
-
-#         if DailyPrecipDataDF_2003_2023 is None or TideDataDF_1998_2023 is None:
-#             raise ValueError("Data loading failed, one of the data frames is None")
-
-#         # Further data processing
-#         precip_data_check9999, precip_data_removed = DataQuality_check9999(DailyPrecipDataDF_2003_2023)
-#         if precip_data_check9999 is None:
-#             raise ValueError("9999 check failed, resulting data is None")
-
-#         precip_data_trace_replace, trace_replacements = replace_trace_precip_values(precip_data_check9999)
-#         if precip_data_trace_replace is None:
-#             raise ValueError("Trace replacement failed, resulting data is None")
-
-#         # Example of plotting after checks
-#         if precip_data_trace_replace is not None:
-#             plot_trace(precip_data_check9999['PRCP'], precip_data_trace_replace['PRCP'], 'Replace Trace Precipitation Values', 'Precipitation_Trace_Replace.png')
-
-#     except Exception as e:
-#         print(f"An error occurred during processing: {e}")
-
-
-
 
 # the following condition checks whether we are running as a script, in which 
 # case run the test code, otherwise functions are being imported so do not.
@@ -801,19 +788,15 @@ if __name__ == '__main__':
     """ ----------------------------- Data Quality Checking -------------------------------------- """
     # 1. Data Quality Check for 9999 Values in Precipitation Data
     precip_data_check9999, precip_data_removed =  DataQuality_check9999(PrecipDataDF)
-    #print(f"Removed {precip_data_removed} entries from precipitation data")
     
     # 2. Replace trace precipitation values
     precip_data_trace_replace, trace_replacements = replace_trace_precip_values(precip_data_check9999)
-    #print(f"Trace values replaced: {trace_replacements}")
     
     # 3. Data Quality Check for Blank Values in (Both the files)
     precip_blanks, tide_blanks = DataQuality_checkBlanks(precip_data_check9999, TideDataDF)
-    #print(f"Blank entries found: {precip_blanks} in precipitation data, {tide_blanks} in tide data.")
 
     # 4. Data Quality Check for Gross Values in (Both the files)
     precip_gross_errors, tide_gross_errors = DataQuality_checkGross(precip_data_check9999, TideDataDF)
-    #print(f"Gross error entries found: {precip_gross_errors} in precipitation data, {tide_gross_errors} in tide data.")
 
     #5. Data Quality Check for Outlier Values in (Both the files)
     precip_Zscore_count, tide_Zscore_count = DataQuality_checkZScore(precip_data_check9999, TideDataDF)    
@@ -832,8 +815,6 @@ if __name__ == '__main__':
    
     ''' Original Precipitation vs. Precipitation - Post 9999 Check '''
     plot_checked_data( PrecipDataDF['PRCP'] , precip_data_check9999['PRCP'] , 'Precipitation (in.)', 'Precipitation - 9999 Check' , 'Figures/Precipitation_9999 Check.png' )
-    
-    ''' Original vs. Post Blank Values Check (Both the files) '''
     
     """ ----------------------------- Data Analysis -------------------------------------- """
     # Group Precipitation Seasonal Data by Station and create plot
@@ -862,12 +843,6 @@ if __name__ == '__main__':
 
     plot_latitude_longitudeMap(precip_station_info_df)
     
-
-
-
-
-
-
 
 """-------------------------------------Yearly/Hourly Tide data Combined -------------------------------------------------------"""
 '''# Combine yearly tide data into one .CSV file
