@@ -1,6 +1,6 @@
 	Precipitation	Verified Tide
-1. Replace Trace Values	2709	0
+1. Replace Trace Values	2792	0
 2. 9999	0	0
-3. Blanks	608	0
-4. Gross Error	4	88
-5. Z-Score	1043	803
+3. Blanks	609	0
+4. Gross Error	0	14
+5. Z-Score	1137	803
