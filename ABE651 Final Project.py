@@ -14,6 +14,7 @@ import pandas as pd
 from scipy import stats
 import numpy as np
 import os  #os = operating system, which will be used to open files
+import seaborn as sns #visualization library for statistical graphics
 
     
 def read_precip_data( PrecipfileName ):
@@ -587,7 +588,7 @@ def plot_mean_monthly_precip( DataDF, station, outFileName):
     plotData['Average Monthly Flow'] = DataDF.groupby(DataDF.index.month)['PRCP'].mean(numeric_only=True)
 
     # Plot data
-    plotData['Average Monthly Flow'].plot(kind="line", label = station) 
+    plotData['Average Monthly Flow'].plot(label = station , alpha=0.5) 
     
     # Set plot details
     plt.tick_params('x',labelrotation = 0)
@@ -597,20 +598,19 @@ def plot_mean_monthly_precip( DataDF, station, outFileName):
     plt.legend(fontsize = 8, bbox_to_anchor=(1.04, 1), borderaxespad=0)
     
     # Save the figure
-    plt.savefig( outFileName )
+    plt.savefig( outFileName, bbox_inches='tight' )
     #plt.close()  # Close the plot figure to free up memory
     
-def plot_extreme_precip( DataDF, station, outFileName):
+
+def plot_precip_hist( DataDF, outFileName ):
     '''
-    This function find the days where daily precipitation > 4 in, creates a plot, and 
+    This function plots the distribution of daily precipitation data and 
     saves the plot to a PNG file.
 
     Parameters
     ----------
     DataDF : Dataframe
-        The Precipitation data in a Pandas Dataframe.
-    station : str
-        Prcipitation Station Name.
+        The tide data in a Pandas Dataframe.
     outFileName : str
         Title of the output .PNG file name
 
@@ -619,26 +619,58 @@ def plot_extreme_precip( DataDF, station, outFileName):
     None.
 
     '''
-    # Filter dataframe by station
-    DataDF = DataDF[(DataDF["STATION"] == station)]
+    sns.histplot(DataDF['PRCP'], kde=True, bins = 5)
     
-    # create empty dataframe "plotData"
-    plotData = pd.DataFrame()
+    # Setting the labels and title
+    plt.xlabel('Precipitation (in)', fontsize=15)
+    plt.ylabel('Count', fontsize=15)
+    plt.title("Distribution of Daily Precipitation at All Stations", fontsize=20)
     
-    # Filter the values of daily precipitation > 4 in
-    plotData = DataDF.loc[DataDF['PRCP'] > 4].reset_index()
+    # Saving the figure
+    plt.savefig(outFileName, bbox_inches='tight')
+    #plt.close()  # Close the plot figure to free up memory
+    
+def plot_extreme_precip( DataDF, outFileName):
+    '''
+    This function find the days where daily precipitation > 3 in, creates a plot, and 
+    saves the plot to a PNG file.
 
-    # Plot data
-    plt.scatter(plotData['DATE'], plotData['PRCP'], label = station) 
-    
-    # Set plot details
-    plt.xlabel('Date', fontsize = 15)
-    plt.ylabel('Precipitation (in)', fontsize = 15) #y-axis label
-    plt.title("Daily Precipitation > 4 in. at All Stations", fontsize = 20) #title of graph
-    plt.legend(fontsize = 8, bbox_to_anchor=(1.04, 1), borderaxespad=0)
+    Parameters
+    ----------
+    DataDF : Dataframe
+        The Precipitation data in a Pandas Dataframe.
+    outFileName : str
+        Title of the output .PNG file name
 
-    # Save the figure
-    plt.savefig( outFileName )
+    Returns
+    -------
+    None.
+
+    '''
+    # Create a dataframe that groups data by Station
+    plotData = DataDF.groupby('STATION')
+
+    # Rename the columns to reflect the structure after reset_index()
+    plotData.columns = ['STATION', 'DATE', 'PRCP']
+    plotData = DataDF.loc[DataDF['PRCP'] > 3].reset_index()
+
+    # Start plotting
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for station, group in plotData.groupby('STATION'):
+        plt.scatter(group['DATE'], group['PRCP'], label = station, alpha=0.5) 
+        
+    # Formatting the x-axis dates
+    ax.xaxis.set_major_formatter(DateFormatter('%Y'))
+    fig.autofmt_xdate()
+
+    # Setting the labels and title
+    plt.xlabel('Date', fontsize=15)
+    plt.ylabel('Precipitation (in)', fontsize=15)
+    plt.title("Daily Precipitation > 3 in. at All Stations", fontsize=20)
+    plt.legend(fontsize=8, bbox_to_anchor=(1.04,1), borderaxespad=0)
+
+    # Saving the figure
+    plt.savefig(outFileName, bbox_inches='tight')
     #plt.close()  # Close the plot figure to free up memory
     
 def plot_max_daily_tide( DataDF , outFileName):
@@ -658,17 +690,20 @@ def plot_max_daily_tide( DataDF , outFileName):
     None.
 
     '''    
-    # create empty dataframe "plotData"
-    plotData = pd.DataFrame(columns=['Max Tide'])
-    
     # Find the Maximum Monthly Tide
-    plotData['Max Tide'] = DataDF['Verified (ft)'].resample("D").max(numeric_only=True)
-    # print(plotData['Max Tide'])
+    plotData = DataDF['Verified (ft)'].resample("D").max(numeric_only=True).reset_index()
+    
+    # Rename the columns to reflect the structure after reset_index()
+    plotData.columns = ['Date', 'Max Tide']
+
+    # Ensure 'DATE' is in datetime format
+    plotData['Date'] = pd.to_datetime(plotData['Date'])
+
     # Prepare the plot
     fig, ax = plt.subplots(figsize=(10, 6))
     
     # Plot data
-    plotData.plot(use_index=True, color = 'b')
+    plt.plot(plotData['Date'], plotData['Max Tide'], c = 'b')
     
     # Set plot details
     plt.xlabel('Date', fontsize = 15)
@@ -677,9 +712,25 @@ def plot_max_daily_tide( DataDF , outFileName):
     
     # Save the figure
     plt.savefig( outFileName )
-    #plt.close(fig)  # Close the plot figure to free up memory
+    plt.close(fig)  # Close the plot figure to free up memory
 
 def plot_3Dprecip_rolling_sum( DataDF , outFileName ):
+    '''
+    This function calculates the 3-day rolling sum of the precipitation at 
+    each station, creates a plot, and saves the plot to a PNG file.
+
+    Parameters
+    ----------
+    DataDF : Dataframe
+        The precipitation data in a Pandas Dataframe.
+    outFileName : str
+        Title of the output .PNG file name
+
+    Returns
+    -------
+    None.
+
+    '''
     # Perform the rolling sum, then reset the index to turn the MultiIndex into columns
     rolling_df = DataDF.groupby('STATION')['PRCP'].rolling(window=3).sum().reset_index()
 
@@ -695,7 +746,7 @@ def plot_3Dprecip_rolling_sum( DataDF , outFileName ):
     # Start plotting
     fig, ax = plt.subplots(figsize=(10, 6))
     for station, group in rolling_df.groupby('STATION'):
-        ax.plot(group['DATE'], group['Rolling Sum'], label=station)
+        plt.scatter(group['DATE'], group['Rolling Sum'],label = station, alpha=0.5)
 
     # Formatting the x-axis dates
     ax.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d'))
@@ -709,6 +760,92 @@ def plot_3Dprecip_rolling_sum( DataDF , outFileName ):
 
     # Saving the figure
     plt.savefig(outFileName, bbox_inches='tight')
+
+
+def combined_tide_precip( tideDataDF, precipDataDF, outFileName ):
+    '''
+    This function calculates the 3-day rolling sum of the precipitation > 6 in. 
+    at each station, and plots 2 subplots. The first subplot is of the daily 
+    precipitation > 3 in. and rolling sum of precipitation > 6 in.
+    The second subplot will be of maximum daily tide. The plot is saved to a 
+    PNG file. 
+
+    Parameters
+    ----------
+    tideDataDF : Dataframe
+        The tide data in a Pandas Dataframe.
+    precipDataDF : Dataframe
+        The precipitation data in a Pandas Dataframe.
+    outFileName : str
+        Title of the output .PNG file name
+
+    Returns
+    -------
+    None.
+
+    '''
+    # Step 1: Create a dataframe for daily precipitation that groups data by Station
+    extreme_plotData = precipDataDF.groupby('STATION')
+
+    # Rename the columns to reflect the structure after reset_index()
+    extreme_plotData.columns = ['STATION', 'DATE', 'PRCP']
+    
+    # Filter the daily precipitation > 3 in.
+    extreme_plotData = precipDataDF.loc[precipDataDF['PRCP'] > 3].reset_index() 
+    
+    # Step 2: Perform the rolling sum, then reset the index to turn the MultiIndex into columns
+    rolling_df = precipDataDF.groupby('STATION')['PRCP'].rolling(window=3).sum().reset_index()
+    
+    # Rename the columns to reflect the structure after reset_index()
+    rolling_df.columns = ['STATION', 'DATE', 'Rolling Sum']
+
+    # Drop NaN values resulting from the rolling calculation
+    rolling_df = rolling_df.dropna(subset=['Rolling Sum'])
+    
+    #Filter only Rolling Sum > 6
+    rolling_df = rolling_df.loc[rolling_df['Rolling Sum'] > 6]
+    
+    # Ensure 'DATE' is in datetime format
+    rolling_df['DATE'] = pd.to_datetime(rolling_df['DATE'])
+    
+    # Step 3: Find the Maximum Monthly Tide
+    tideplotData = tideDataDF['Verified (ft)'].resample("D").max(numeric_only=True).reset_index()
+    
+    # Rename the columns to reflect the structure after reset_index()
+    tideplotData.columns = ['Date', 'Max Tide']
+    
+    # Ensure 'DATE' is in datetime format
+    tideplotData['Date'] = pd.to_datetime(tideplotData['Date'])
+    
+    # Start plotting
+    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols= 1, sharex=True, figsize=(10, 6))
+    ax1 = plt.subplot(211) #211 stands for: 2 rows, 1 column, and first (1) subplot
+    for station, group in extreme_plotData.groupby('STATION'):
+        plt.scatter(group['DATE'], group['PRCP'], marker = 'o', label = station, alpha=0.5)
+    for station, group in rolling_df.groupby('STATION'):
+        plt.scatter(group['DATE'], group['Rolling Sum'], marker = '^', label = station, alpha=0.5)
+    
+    # Setting the labels and title
+    plt.ylabel('Precipitation (in)', fontsize=15)
+    plt.suptitle("Daily Precipitation > 3 in (circle marker)", fontsize=20)
+    plt.title("3-Day Cumulative Precipitation > 6 in (triangle marker)", fontsize=20)
+    #plt.legend(fontsize=8, bbox_to_anchor=(1.2,1), borderaxespad=0)
+    
+    ax2 = plt.subplot(212) #211 stands for: 2 rows, 1 column, and second (2) subplot
+    plt.plot(tideplotData['Date'], tideplotData['Max Tide'], c = 'b', alpha=0.5)
+    
+    # Setting the labels and title
+    plt.xlabel('Date', fontsize = 15)
+    plt.ylabel('Tide (ft.)', fontsize = 15) #y-axis label
+    plt.title("Maximum Daily Tide", fontsize = 20) #title of graph
+    
+    ax1.set_xticklabels([])
+    ax2.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d'))
+    fig.autofmt_xdate()
+
+    # Saving the figure
+    plt.savefig(outFileName, bbox_inches='tight')
+
     
     "----------------------------------Plot the Map ---------------------------------------------------------------"
 
@@ -779,7 +916,7 @@ if __name__ == '__main__':
     # Create Pandas Dataframe that summarizes Precipitation Stations Info and creates .CSV file
     precip_station_info_df = precip_station_info( DailyPrecipDataDF_2003_2023 )
     
-    # Clip Precipitation and Tide Dataframes to given time periods (January 2004 to December 2023)
+    # Clip Precipitation Dataframes to given time periods (January 2004 to December 2023)
     PrecipDataDF = ClipData( DailyPrecipDataDF_2003_2023 , "2004-01-01", "2023-12-31")
     
     # Clipped Precipitation Plot
@@ -811,31 +948,34 @@ if __name__ == '__main__':
     """ -----------------------------  Graphical Data Analysis -------------------------------------- """
 
     ''' Original Precipitation vs. Precipitation - Post Trace Replacement '''
-    plot_checked_data( PrecipDataDF['PRCP'] , precip_data_trace_replace['PRCP'] , 'Precipitation (in.)', 'Precipitation - Trace Replace' , 'Figures/Precipitation_Trace Replace.png' )
+    #plot_checked_data( PrecipDataDF['PRCP'] , precip_data_trace_replace['PRCP'] , 'Precipitation (in.)', 'Precipitation - Trace Replace' , 'Figures/Precipitation_Trace Replace.png' )
    
     ''' Original Precipitation vs. Precipitation - Post 9999 Check '''
-    plot_checked_data( PrecipDataDF['PRCP'] , precip_data_check9999['PRCP'] , 'Precipitation (in.)', 'Precipitation - 9999 Check' , 'Figures/Precipitation_9999 Check.png' )
+    #plot_checked_data( PrecipDataDF['PRCP'] , precip_data_check9999['PRCP'] , 'Precipitation (in.)', 'Precipitation - 9999 Check' , 'Figures/Precipitation_9999 Check.png' )
     
     """ ----------------------------- Data Analysis -------------------------------------- """
     # Group Precipitation Seasonal Data by Station and create plot
     seasonal_precip_df = seasonal_precip( DailyPrecipDataDF_2003_2023 ) # remove this one once modified_precip_data is complete
     '''seasonal_precip_df = seasonal_precip( modified_precip_data ) # unhash this one once modified_precip_data is complete'''
-    plot_seasonaltrends(seasonal_precip_df, 'Figures/Seasonal_Precipitation_Trends.png')
+    #plot_seasonaltrends(seasonal_precip_df, 'Figures/Seasonal_Precipitation_Trends.png')
     
-    ''''Plot_extreme_precip or plot_mean_monthly_precip can only be run one at a time'''
     # Plot mean monthly precipitation at each station
-    for station in precip_station_info_df.index:
-        plot_mean_monthly_precip( PrecipDataDF , station, 'Figures/Average Monthly Precipitation_All Stations.png')
-    
-    ''''Plot_extreme_precip or plot_mean_monthly_precip can only be run one at a time'''
     #for station in precip_station_info_df.index:
-    #    plot_extreme_precip(  PrecipDataDF , station, 'Figures/Extreme Precipitation_All Stations.png' )
-
+    #    plot_mean_monthly_precip( PrecipDataDF , station, 'Figures/Average Monthly Precipitation_All Stations.png')
+    
+    plot_precip_hist( PrecipDataDF, 'Figures/Daily Precipitation Histogram_All Stations.png' )
+    
+    # Plot when daily precipitation > 4 in at all stations
+    plot_extreme_precip( PrecipDataDF  , 'Figures/Extreme Precipitation_All Stations.png' )
+    
     # Plot maximum monthly tide
     plot_max_daily_tide( TideDataDF , 'Figures/Maximum Daily Tide Data.png')
     
-    plot_3Dprecip_rolling_sum( PrecipDataDF , 'Figures/rolling_precip.png')
-            
+    # Plot 3-day rolling sum of precipitation
+    plot_3Dprecip_rolling_sum( PrecipDataDF , 'Figures/Rolling_Precip.png')
+    
+    # Plot a combined graph of when daily precipitation > 4 in, 3-day rolling sum of precipitation > 4 in, and maximum tide
+    combined_tide_precip( TideDataDF , PrecipDataDF , 'Figures/Combined_Tide_Precip.png')       
     "----------------------------------Plot the Map ---------------------------------------------------------------"
     plot_latitude_longitudeMap(precip_station_info_df)
     
