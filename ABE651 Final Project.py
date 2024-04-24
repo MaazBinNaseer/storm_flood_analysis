@@ -837,10 +837,6 @@ if __name__ == '__main__':
     plot_3Dprecip_rolling_sum( PrecipDataDF , 'Figures/rolling_precip.png')
             
     "----------------------------------Plot the Map ---------------------------------------------------------------"
-    
-    #data_sample = pd.read_csv('Datasets/Daily Precipitation Data/Daily Precipitation Data_Fort Myers_FL.csv')
-    #unique_locs = data_sample.drop_duplicates(subset=['LATITUDE', 'LONGITUDE'])
-
     plot_latitude_longitudeMap(precip_station_info_df)
     
 
