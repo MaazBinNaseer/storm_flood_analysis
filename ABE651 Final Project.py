@@ -13,6 +13,7 @@ from shapely.geometry import Point
 import pandas as pd
 from scipy import stats
 import numpy as np
+import seaborn as sns
 import os  #os = operating system, which will be used to open files
 import seaborn as sns #visualization library for statistical graphics
 
