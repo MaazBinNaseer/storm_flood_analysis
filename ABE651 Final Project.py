@@ -357,45 +357,54 @@ def DataQuality_checkGross(precip_data, tide_data):
         print(f"An error occurred: {e}")
         return (0, 0)  
     
+import numpy as np
+from scipy import stats
+import pandas as pd
+
 def DataQuality_checkZScore(precip_data, tide_data):
     '''
     This function removes outliers with Z Score in specific columns based on 
-    defined conditions in precipitation and tide data files, and returns the 
-    count of such errors for each file.
+    defined conditions in precipitation and tide data files. It returns the 
+    cleaned data and the count of such outliers for each file.
 
     Parameters
     ----------
-    precip_data : str
-        The precipitation dataframe returned from the read_precip_data function.
-    tide_data : str
-        The tide dataframe returned from the read_tide_data function.
+    precip_data : DataFrame
+        The precipitation DataFrame.
+    tide_data : DataFrame
+        The tide DataFrame.
 
     Returns
     -------
-    None.
-
+    tuple
+        A tuple containing the cleaned precipitation DataFrame, count of precipitation outliers,
+        cleaned tide DataFrame, and count of tide outliers.
     '''
     try:
+        # Handling precipitation data
         precip_data = precip_data.copy()
-        # Check and count outliers in precipitation data
         precip_data['PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
         precip_in_range = precip_data[(precip_data['PRCP'] >= 0) & (precip_data['PRCP'] <= 25)]
         z_precip = np.abs(stats.zscore(precip_in_range['PRCP'].dropna()))
-        precip_outliers = np.where(z_precip > 3)[0]  # Using 3 as a threshold for Z-score
-        precip_Zscore_count = len(precip_outliers)
+        precip_outlier_indices = np.where(z_precip > 3)[0]
+        precip_cleaned = precip_in_range.drop(precip_in_range.index[precip_outlier_indices])
+        precip_outlier_count = len(precip_outlier_indices)
 
-        # Check and count outliers in tide data
+        # Handling tide data
+        tide_data = tide_data.copy()
         tide_data['Verified (ft)'] = pd.to_numeric(tide_data['Verified (ft)'], errors='coerce')
         tide_in_range = tide_data[(tide_data['Verified (ft)'] >= -4) & (tide_data['Verified (ft)'] <= 4)]
         z_tide = np.abs(stats.zscore(tide_in_range['Verified (ft)'].dropna()))
-        tide_outliers = np.where(z_tide > 3)[0]  # Using 3 as a threshold for Z-score
-        tide_Zscore_count = len(tide_outliers)
+        tide_outlier_indices = np.where(z_tide > 3)[0]
+        tide_cleaned = tide_in_range.drop(tide_in_range.index[tide_outlier_indices])
+        tide_outlier_count = len(tide_outlier_indices)
 
-        return (precip_Zscore_count, tide_Zscore_count)
+        return (precip_cleaned, precip_outlier_count, tide_cleaned, tide_outlier_count)
 
     except Exception as e:
         print(f"An error occurred: {e}")
-        return (0, 0)  
+        return (precip_data, 0, tide_data, 0)
+  
 
 """ ---------------------------- Summary table with data quality checking results ---------------------------- """
 
@@ -966,11 +975,15 @@ if __name__ == '__main__':
     precip_gross_errors, tide_gross_errors = DataQuality_checkGross(precip_data_check9999, TideDataDF)
 
     #5. Data Quality Check for Outlier Values in (Both the files)
-    precip_Zscore_count, tide_Zscore_count = DataQuality_checkZScore(precip_data_check9999, TideDataDF)    
+    modified_precip_data, precip_Zscore_count, modified_tide_data, tide_Zscore_count = DataQuality_checkZScore(precip_data_check9999, TideDataDF)
+
     
-    # modified_precip_data.to_csv("Datasets/Modified_Hourly_Precipitation_Data_Fort_Myers_FL.csv", index=False) 
     
-    # modified_tide_data.to_csv("Datasets/Modified_Hourly_Tide_Data_Fort_Myers_FL.csv", index=False) 
+    modified_precip_data.to_csv("Datasets/Modified_Hourly_Precipitation_Data_Fort_Myers_FL.csv", index=False) 
+    
+    modified_tide_data.to_csv("Datasets/Modified_Hourly_Tide_Data_Fort_Myers_FL.csv", index=False) 
+
+
     """ ----------------------------- Summary table with data quality checking results---------------------------- """
     ''' Create Pandas Dataframe that summarizes number of data quality checks and creates .CSV file'''
     ReplacedValuesDF( trace_replacements, precip_data_removed, precip_blanks, tide_blanks, precip_gross_errors , tide_gross_errors, precip_Zscore_count, tide_Zscore_count)
