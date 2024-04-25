@@ -16,7 +16,6 @@ import numpy as np
 import seaborn as sns
 import os  #os = operating system, which will be used to open files
 import seaborn as sns #visualization library for statistical graphics
-
     
 def read_precip_data( PrecipfileName ):
     '''
@@ -611,6 +610,36 @@ def plot_precip_hist( DataDF, outFileName ):
     Parameters
     ----------
     DataDF : Dataframe
+        The precipitation data in a Pandas Dataframe.
+    outFileName : str
+        Title of the output .PNG file name
+
+    Returns
+    -------
+    None.
+
+    '''
+    plotData = DataDF.loc[DataDF['PRCP'] > 2]
+    
+    sns.histplot(plotData['PRCP'], bins = 100)
+    
+    # Setting the labels and title
+    plt.xlabel('Precipitation (in)', fontsize=15)
+    plt.ylabel('Count', fontsize=15)
+    plt.suptitle("Distribution of Daily Precipitation > 2 in. at All Stations", fontsize=20)
+
+    # Saving the figure
+    plt.savefig(outFileName, bbox_inches='tight')
+    plt.close()  # Close the plot figure to free up memory
+    
+def plot_tide_hist( DataDF, outFileName ):
+    '''
+    This function plots the distribution of hourly tide data and 
+    saves the plot to a PNG file.
+
+    Parameters
+    ----------
+    DataDF : Dataframe
         The tide data in a Pandas Dataframe.
     outFileName : str
         Title of the output .PNG file name
@@ -620,16 +649,16 @@ def plot_precip_hist( DataDF, outFileName ):
     None.
 
     '''
-    sns.histplot(DataDF['PRCP'], kde=True, bins = 5)
+    sns.histplot(DataDF['Verified (ft)'], kde = True, bins = 100, color='g')
     
     # Setting the labels and title
-    plt.xlabel('Precipitation (in)', fontsize=15)
+    plt.xlabel('Tide (ft)', fontsize=15)
     plt.ylabel('Count', fontsize=15)
-    plt.title("Distribution of Daily Precipitation at All Stations", fontsize=20)
-    
+    plt.suptitle("Distribution of Hourly Tide", fontsize=20)
+
     # Saving the figure
     plt.savefig(outFileName, bbox_inches='tight')
-    #plt.close()  # Close the plot figure to free up memory
+    plt.close()  # Close the plot figure to free up memory    
     
 def plot_extreme_precip( DataDF, outFileName):
     '''
@@ -672,7 +701,7 @@ def plot_extreme_precip( DataDF, outFileName):
 
     # Saving the figure
     plt.savefig(outFileName, bbox_inches='tight')
-    #plt.close()  # Close the plot figure to free up memory
+    plt.close()  # Close the plot figure to free up memory
     
 def plot_max_daily_tide( DataDF , outFileName):
     '''
@@ -847,7 +876,7 @@ def combined_tide_precip( tideDataDF, precipDataDF, outFileName ):
     # Saving the figure
     plt.savefig(outFileName, bbox_inches='tight')
 
-    
+
     "----------------------------------Plot the Map ---------------------------------------------------------------"
 
 def plot_latitude_longitudeMap(data_frame):
@@ -964,7 +993,10 @@ if __name__ == '__main__':
     #for station in precip_station_info_df.index:
     #    plot_mean_monthly_precip( PrecipDataDF , station, 'Figures/Average Monthly Precipitation_All Stations.png')
     
+    # Plot histograms for daily precipitation and tide to get distributions
     plot_precip_hist( PrecipDataDF, 'Figures/Daily Precipitation Histogram_All Stations.png' )
+    
+    plot_tide_hist( TideDataDF, 'Figures/Hourly Tide Histogram.png' )
     
     # Plot when daily precipitation > 4 in at all stations
     plot_extreme_precip( PrecipDataDF  , 'Figures/Extreme Precipitation_All Stations.png' )
@@ -976,7 +1008,9 @@ if __name__ == '__main__':
     plot_3Dprecip_rolling_sum( PrecipDataDF , 'Figures/Rolling_Precip.png')
     
     # Plot a combined graph of when daily precipitation > 4 in, 3-day rolling sum of precipitation > 4 in, and maximum tide
-    combined_tide_precip( TideDataDF , PrecipDataDF , 'Figures/Combined_Tide_Precip.png')       
+    combined_tide_precip( TideDataDF , PrecipDataDF , 'Figures/Combined_Tide_Precip.png')
+
+
     "----------------------------------Plot the Map ---------------------------------------------------------------"
     plot_latitude_longitudeMap(precip_station_info_df)
     
