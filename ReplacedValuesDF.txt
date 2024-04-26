@@ -3,4 +3,4 @@
 2. 9999	0	0
 3. Blanks	609	0
 4. Gross Error	0	14
-5. Z-Score	1137	803
+5. Z-Score	0	0
