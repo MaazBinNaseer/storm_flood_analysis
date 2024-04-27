@@ -13,8 +13,8 @@ from shapely.geometry import Point
 import pandas as pd
 from scipy import stats
 import numpy as np
+import seaborn as sns
 import os  #os = operating system, which will be used to open files
-import seaborn as sns #visualization library for statistical graphics
     
 def read_precip_data( PrecipfileName ):
     '''
@@ -37,7 +37,7 @@ def read_precip_data( PrecipfileName ):
                              header='infer',
                              index_col= [5], 
                              parse_dates=[5])
-        DataDF.sort_index() # Sort the index in ascending order
+        DataDF.sort_index(inplace=True) # Sort the index in ascending order
         #print(DataDF)
         return(DataDF)
 
@@ -243,6 +243,7 @@ def DataQuality_check9999(precip_data):
     '''
    
     precip_data = precip_data.copy()
+
     # Convert data to float to avoid string comparison issues
     precip_data.loc[:, 'PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
 
@@ -250,8 +251,7 @@ def DataQuality_check9999(precip_data):
     precip_original_count = len(precip_data)
     precip_data_cleaned = precip_data[precip_data['PRCP'] != 9999]
     precip_removed_count = precip_original_count - len(precip_data_cleaned)
-
-
+    
     return (precip_data_cleaned, precip_removed_count)
 
 def replace_trace_precip_values(precip_data):
@@ -261,31 +261,33 @@ def replace_trace_precip_values(precip_data):
 
     Parameters
     ----------
-    precip_data : str
-        The precipitation dataframe returned from the read_precip_data function.
+    precip_data : DataFrame
+        The precipitation dataframe.
 
     Returns
     -------
-    precip_data
-        cleaned precipitation dataframe.
-    trace_count
-        number of trace replacements
+    precip_data : DataFrame
+        Cleaned precipitation dataframe with trace values replaced by 0.005.
+    trace_count : int
+        Number of trace replacements made.
 
     '''
     try:
         # Ensure 'PRCP_ATTRIBUTES' is a string and handle missing data
         precip_data['PRCP_ATTRIBUTES'] = precip_data['PRCP_ATTRIBUTES'].astype(str)
+        
+        # Find entries where the 'PRCP_ATTRIBUTES' column starts with 'T'
         mask = precip_data['PRCP_ATTRIBUTES'].str.startswith('T')
         
-        # Filter out where mask is true
-        cleaned_data = precip_data[~mask]
-        trace_count = mask.sum()
+        # Replace these entries with 0.005 inches
+        precip_data.loc[mask, 'PRCP'] = 0.005
+        trace_count = mask.sum()  # Count how many replacements were made
 
-        return (cleaned_data, trace_count)
+        return (precip_data, trace_count)
 
     except Exception as e:
         print(f"An error occurred: {e}")
-        return None, 0
+        return precip_data, 0
 
 def DataQuality_checkBlanks(precip_data, tide_data):
     '''
@@ -339,66 +341,127 @@ def DataQuality_checkGross(precip_data, tide_data):
         columns of the precipitation and tide data, respectively.
 
     '''
+    # Initialize counters
+    precip_gross_errors = tide_gross_errors = 0
+    
     try:
-        # Check for gross errors in precipitation data
-        # Gross error defined as values outside the range 0 inches to 25 inches
-        precip_data.loc[:, 'PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
+        # Convert 'PRCP' to numeric, coerce errors which will be turned to NaNs
+        precip_data['PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
+
+        # Find and count gross errors in precipitation data
         precip_gross_errors = precip_data[(precip_data['PRCP'] < 0) | (precip_data['PRCP'] > 25)].shape[0]
+        # Remove gross errors
+        precip_data_clean = precip_data[(precip_data['PRCP'] >= 0) & (precip_data['PRCP'] <= 25)]
 
-        # Check for gross errors in tide data
-        # Gross error defined as values outside the range -4 feet to 4 feet
-        tide_data['Verified (ft)'] = pd.to_numeric(tide_data['Verified (ft)'], errors='coerce')  # Ensure data is float
+        # Convert 'Verified (ft)' to numeric, coerce errors to NaNs
+        tide_data['Verified (ft)'] = pd.to_numeric(tide_data['Verified (ft)'], errors='coerce')
+        
+        # Find and count gross errors in tide data
         tide_gross_errors = tide_data[(tide_data['Verified (ft)'] < -4) | (tide_data['Verified (ft)'] > 4)].shape[0]
+        # Remove gross errors
+        tide_data_clean = tide_data[(tide_data['Verified (ft)'] >= -4) & (tide_data['Verified (ft)'] <= 4)]
 
-        return (precip_gross_errors, tide_gross_errors)
+        return (precip_data_clean, tide_data_clean, precip_gross_errors, tide_gross_errors)
 
     except Exception as e:
         print(f"An error occurred: {e}")
         return (0, 0)  
     
-def DataQuality_checkZScore(precip_data, tide_data):
+
+# def DataQuality_checkZScore(precip_data, tide_data):
+#     '''
+#     Adjusted to ensure 'date' column is retained.
+#     '''
+#     try:
+#         # Assuming 'date' columns are present and correctly formatted
+#         precip_data['PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
+#         precip_in_range = precip_data[(precip_data['PRCP'] >= 0) & (precip_data['PRCP'] <= 25)]
+        
+#         z_precip = np.abs(stats.zscore(precip_in_range['PRCP'].dropna()))
+#         precip_outlier_indices = np.where(z_precip > 3)[0]
+#         precip_cleaned = precip_in_range.drop(precip_in_range.index[precip_outlier_indices])
+#         precip_outlier_count = len(precip_outlier_indices)
+
+#         tide_data['Verified (ft)'] = pd.to_numeric(tide_data['Verified (ft)'], errors='coerce')
+#         tide_in_range = tide_data[(tide_data['Verified (ft)'] >= -4) & (tide_data['Verified (ft)'] <= 4)]
+        
+#         z_tide = np.abs(stats.zscore(tide_in_range['Verified (ft)'].dropna()))
+#         tide_outlier_indices = np.where(z_tide > 3)[0]
+#         tide_cleaned = tide_in_range.drop(tide_in_range.index[tide_outlier_indices])
+#         tide_outlier_count = len(tide_outlier_indices)
+
+#         return (precip_cleaned, precip_outlier_count, tide_cleaned, tide_outlier_count)
+
+#     except Exception as e:
+#         print(f"An error occurred: {e}")
+#         return (precip_data, 0, tide_data, 0)
+
+def find_critical_events_grouped_by_season( tide_data, precip_data):
     '''
-    This function removes outliers with Z Score in specific columns based on 
-    defined conditions in precipitation and tide data files, and returns the 
-    count of such errors for each file.
+    This function calculates when the following critical conditions are met:
+        Maximum Daily Precipitation > 3 in. and when Maximum Tide > 3 ft.
+        3-Day Rolling Precipitaton > 6 in. and when Maximum Tide > 3 ft.
 
     Parameters
     ----------
-    precip_data : str
-        The precipitation dataframe returned from the read_precip_data function.
-    tide_data : str
-        The tide dataframe returned from the read_tide_data function.
+    tideDataDF : Dataframe
+        The modified tide data in a Pandas Dataframe.
+    precipDataDF : Dataframe
+        The modified precipitation data in a Pandas Dataframe.
 
     Returns
     -------
-    None.
+    Pandas Series
+        The season and corresponding number of critical events.
 
     '''
-    try:
-        precip_data = precip_data.copy()
-        # Check and count outliers in precipitation data
-        precip_data['PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
-        precip_in_range = precip_data[(precip_data['PRCP'] >= 0) & (precip_data['PRCP'] <= 25)]
-        z_precip = np.abs(stats.zscore(precip_in_range['PRCP'].dropna()))
-        precip_outliers = np.where(z_precip > 3)[0]  # Using 3 as a threshold for Z-score
-        precip_Zscore_count = len(precip_outliers)
+    # Ensure the date is the index in both dataframes
+    tide_data.index = pd.to_datetime(tide_data.index)
+    precip_data.index = pd.to_datetime(precip_data.index)
+    
 
-        # Check and count outliers in tide data
-        tide_data['Verified (ft)'] = pd.to_numeric(tide_data['Verified (ft)'], errors='coerce')
-        tide_in_range = tide_data[(tide_data['Verified (ft)'] >= -4) & (tide_data['Verified (ft)'] <= 4)]
-        z_tide = np.abs(stats.zscore(tide_in_range['Verified (ft)'].dropna()))
-        tide_outliers = np.where(z_tide > 3)[0]  # Using 3 as a threshold for Z-score
-        tide_Zscore_count = len(tide_outliers)
+    # Filtering for max daily tide greater than 3 feet 
+    high_tide = tide_data.loc[tide_data['Verified (ft)'] > 3].resample('D').max()
+    
+    # Filtering for daily precipitation greater than 3 inches 
+    high_daily_precip = precip_data.loc[precip_data['PRCP'] > 3]
+    
+    # Calculate the 3-day rolling sum of precipitation and find when it is greater than 6 inches
+    rolling_precip = precip_data['PRCP'].rolling(window=3).sum()
+    high_rolling_precip = rolling_precip.loc[rolling_precip > 6]
 
-        return (precip_Zscore_count, tide_Zscore_count)
+    # Define a function to assign the season to each date
+    def get_season(date):
+        year = str(date.year)
+        seasons = {'Spring': pd.date_range(start=year + '-03-01', end=year + '-05-31'),
+                   'Summer': pd.date_range(start=year + '-06-01', end=year + '-08-31'),
+                   'Fall': pd.date_range(start=year + '-09-01', end=year + '-11-30'),
+                   'Winter': pd.date_range(start=year + '-12-01', end=year + '-12-31').union(
+                             pd.date_range(start=year + '-01-01', end=year + '-02-28'))}
+        for season, season_dates in seasons.items():
+            if date in season_dates:
+                return season
+        # Catch dates that are in a leap year:
+        return 'Winter'
 
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return (0, 0)  
+    # Check the conditions and combine the events
+    combined_conditions = (
+        high_daily_precip.index.intersection(high_tide.index)
+        .union(
+            high_rolling_precip.index.intersection(high_tide.index)
+        )
+    )
 
+    # Assign each date from the combined conditions to a season
+    combined_conditions_season = combined_conditions.to_series().apply(get_season)
+    
+    # Group by season
+    critical_weather_by_season = combined_conditions_season.value_counts().reindex(['Winter', 'Spring', 'Summer', 'Fall'], fill_value=0)
+
+    return critical_weather_by_season
 """ ---------------------------- Summary table with data quality checking results ---------------------------- """
 
-def ReplacedValuesDF( Precip_trace, Precip_check9999, Precip_checkBlanks, Tide_checkBlanks, Precip_gross_errors , Tide_gross_errors, Precip_checkZscore, Tide_checkZscore):
+def ReplacedValuesDF( Precip_trace, Precip_check9999, Precip_checkBlanks, Tide_checkBlanks, Precip_gross_errors , Tide_gross_errors):
     # define and initialize the missing data frame
     ReplacedValuesDF = pd.DataFrame(0, index=["1. Replace Trace Values", "2. 9999", "3. Blanks","4. Gross Error", "5. Z-Score"], columns=["Precipitation", "Verified Tide"])
     #print(ReplacedValuesDF)
@@ -414,8 +477,8 @@ def ReplacedValuesDF( Precip_trace, Precip_check9999, Precip_checkBlanks, Tide_c
     ReplacedValuesDF.loc["4. Gross Error", "Precipitation"] = Precip_gross_errors
     ReplacedValuesDF.loc["4. Gross Error", "Verified Tide"] = Tide_gross_errors
     
-    ReplacedValuesDF.loc["5. Z-Score", "Precipitation"] = Precip_checkZscore
-    ReplacedValuesDF.loc["5. Z-Score", "Verified Tide"] = Tide_checkZscore
+    # ReplacedValuesDF.loc["5. Z-Score", "Precipitation"] = Precip_checkZscore
+    # ReplacedValuesDF.loc["5. Z-Score", "Verified Tide"] = Tide_checkZscore
 
     ReplacedValuesDF.to_csv('ReplacedValuesDF.txt', sep='\t', index=True)
     
@@ -445,13 +508,13 @@ def plot_precipitation( plotData , title , outFileName ):
     fig, ax = plt.subplots(figsize=(10, 6))
     
     # Plot data
-    plotData.plot(use_index=True, color = 'b')
+    plt.scatter(plotData.index, plotData.values, color = 'xkcd:sky blue', alpha = 0.5)
     
     # Set plot details
     ax.set_xlabel('Date', fontsize = 15)
     ax.set_ylabel('Precipitation (in)', fontsize = 15) #y-axis label
     ax.set_title(title, fontsize = 20) #title of graph
-    
+
     # Save the figure
     plt.savefig( outFileName )
     plt.close(fig)  # Close the plot figure to free up memory 
@@ -479,16 +542,16 @@ def plot_tide( plotData , title , outFileName ):
    
     # Plot data
     plotData = pd.to_numeric(plotData, errors='coerce')  # Ensure data is float
-    plotData.plot(use_index=True, color = 'b')
+    plt.scatter(plotData.index, plotData.values, color = 'mediumseagreen', alpha = 0.5)
     
     # Set plot details
     ax.set_xlabel('Date', fontsize = 15)
     ax.set_ylabel('Tide (ft)', fontsize = 15) #y-axis label
     ax.set_title(title, fontsize = 20) #title of graph
-    
+
     # Save the figure
     plt.savefig( outFileName )
-    plt.close(fig)  # Close the plot figure to free up memory 
+    plt.close(fig)  # Close the plot figure to free up memory '''
     
 def plot_checked_data( original_plotData , new_plotData , y_label, title , outFileName ):
     '''
@@ -515,14 +578,14 @@ def plot_checked_data( original_plotData , new_plotData , y_label, title , outFi
     fig, ax = plt.subplots(figsize=(10, 6))
     
     # Plot data
-    original_plotData.plot(use_index=True, color='g', label = 'Original Data')
-    new_plotData.plot(use_index=True, color='b', alpha=0.75, label = 'Checked Data')
+    plt.scatter(original_plotData.index, original_plotData.values, color='b', alpha=0.5, label = 'Original Data')
+    new_plotData.plot(use_index=True, color='k', alpha=0.5, label = 'Checked Data')
     
     # Set plot details
     ax.set_xlabel('Date', fontsize = 15)
     ax.set_ylabel(y_label, fontsize = 15) #y-axis label
     ax.set_title(title, fontsize = 20) #title of graph
-    plt.legend(fontsize = 8, loc = "upper right") #legend label
+    plt.legend(fontsize = 8, loc = "upper left") #legend label
     
     # Save the figure
     plt.savefig( outFileName )
@@ -566,7 +629,7 @@ def plot_mean_monthly_precip( DataDF, station, outFileName):
     Parameters
     ----------
     DataDF : Dataframe
-        The Precipitation data in a Pandas Dataframe.
+        The modified precipitation data in a Pandas Dataframe.
     station : str
         Prcipitation Station Name.
     outFileName : str
@@ -587,7 +650,7 @@ def plot_mean_monthly_precip( DataDF, station, outFileName):
     plotData['Average Monthly Flow'] = DataDF.groupby(DataDF.index.month)['PRCP'].mean(numeric_only=True)
 
     # Plot data
-    plotData['Average Monthly Flow'].plot(label = station , alpha=0.5) 
+    plt.scatter(plotData.index, plotData.values, label = station , alpha=0.5)
     
     # Set plot details
     plt.tick_params('x',labelrotation = 0)
@@ -609,7 +672,7 @@ def plot_precip_hist( DataDF, outFileName ):
     Parameters
     ----------
     DataDF : Dataframe
-        The precipitation data in a Pandas Dataframe.
+        The modified precipitation data in a Pandas Dataframe.
     outFileName : str
         Title of the output .PNG file name
 
@@ -619,7 +682,7 @@ def plot_precip_hist( DataDF, outFileName ):
 
     '''
     plotData = DataDF.loc[DataDF['PRCP'] > 2]
-    
+    plt.figure(figsize=(10, 5))
     sns.histplot(plotData['PRCP'], bins = 100)
     
     # Setting the labels and title
@@ -639,7 +702,7 @@ def plot_tide_hist( DataDF, outFileName ):
     Parameters
     ----------
     DataDF : Dataframe
-        The tide data in a Pandas Dataframe.
+        The modified tide data in a Pandas Dataframe.
     outFileName : str
         Title of the output .PNG file name
 
@@ -648,6 +711,7 @@ def plot_tide_hist( DataDF, outFileName ):
     None.
 
     '''
+    plt.figure(figsize=(10, 5))
     sns.histplot(DataDF['Verified (ft)'], kde = True, bins = 100, color='g')
     
     # Setting the labels and title
@@ -667,7 +731,7 @@ def plot_extreme_precip( DataDF, outFileName):
     Parameters
     ----------
     DataDF : Dataframe
-        The Precipitation data in a Pandas Dataframe.
+        The modified precipitation data in a Pandas Dataframe.
     outFileName : str
         Title of the output .PNG file name
 
@@ -710,7 +774,7 @@ def plot_max_daily_tide( DataDF , outFileName):
     Parameters
     ----------
     DataDF : Dataframe
-        The tide data in a Pandas Dataframe.
+        The modified tide data in a Pandas Dataframe.
     outFileName : str
         Title of the output .PNG file name
 
@@ -732,7 +796,7 @@ def plot_max_daily_tide( DataDF , outFileName):
     fig, ax = plt.subplots(figsize=(10, 6))
     
     # Plot data
-    plt.plot(plotData['Date'], plotData['Max Tide'], c = 'b')
+    plt.scatter(plotData['Date'], plotData['Max Tide'], c = 'mediumseagreen', alpha=0.5)
     
     # Set plot details
     plt.xlabel('Date', fontsize = 15)
@@ -751,7 +815,7 @@ def plot_3Dprecip_rolling_sum( DataDF , outFileName ):
     Parameters
     ----------
     DataDF : Dataframe
-        The precipitation data in a Pandas Dataframe.
+        The modified precipitation data in a Pandas Dataframe.
     outFileName : str
         Title of the output .PNG file name
 
@@ -789,6 +853,7 @@ def plot_3Dprecip_rolling_sum( DataDF , outFileName ):
 
     # Saving the figure
     plt.savefig(outFileName, bbox_inches='tight')
+    plt.close(fig)  # Close the plot figure to free up memory
 
 
 def combined_tide_precip( tideDataDF, precipDataDF, outFileName ):
@@ -802,9 +867,9 @@ def combined_tide_precip( tideDataDF, precipDataDF, outFileName ):
     Parameters
     ----------
     tideDataDF : Dataframe
-        The tide data in a Pandas Dataframe.
+        The modified tide data in a Pandas Dataframe.
     precipDataDF : Dataframe
-        The precipitation data in a Pandas Dataframe.
+        The modified precipitation data in a Pandas Dataframe.
     outFileName : str
         Title of the output .PNG file name
 
@@ -861,7 +926,7 @@ def combined_tide_precip( tideDataDF, precipDataDF, outFileName ):
     #plt.legend(fontsize=8, bbox_to_anchor=(1.2,1), borderaxespad=0)
     
     ax2 = plt.subplot(212) #211 stands for: 2 rows, 1 column, and second (2) subplot
-    plt.plot(tideplotData['Date'], tideplotData['Max Tide'], c = 'b', alpha=0.5)
+    plt.scatter(tideplotData['Date'], tideplotData['Max Tide'], c = 'mediumseagreen', alpha=0.5)
     
     # Setting the labels and title
     plt.xlabel('Date', fontsize = 15)
@@ -874,7 +939,76 @@ def combined_tide_precip( tideDataDF, precipDataDF, outFileName ):
 
     # Saving the figure
     plt.savefig(outFileName, bbox_inches='tight')
+    plt.close(fig)  # Close the plot figure to free up memory
 
+def plot_seasonal_critical_weather_events(critical_conditions_by_season , outFileName):
+    '''
+    This function plots a bar chart of the number of events per season when the 
+    following criteria are coinciding:
+        Maximum Daily Precipitation > 3 in. and when Maximum Tide > 3 ft.
+        3-Day Rolling Precipitaton > 6 in. and when Maximum Tide > 3 ft.
+        
+    Parameters
+    ----------
+    critical_conditions_by_season : Pandas Series
+        The season and corresponding number of critical events
+    outFileName : str
+        Title of the output .PNG file name.
+
+    Returns
+    -------
+    None.
+
+    '''
+    # Start plotting
+    fig, ax = plt.subplots(figsize=(10, 6))
+    critical_conditions_by_season.plot(kind='bar', color=['blue', 'orange', 'green', 'red'])
+    
+    # Setting the labels and title
+    plt.title('Number of Extreme Tide and Precipitation Coincidences in a Season', fontsize=20)
+    plt.xlabel('Season', fontsize=15)
+    plt.ylabel('Number of Critical Events', fontsize=15)
+    plt.xticks(rotation=0)  # This will ensure that the season names are not rotated
+    plt.tight_layout()  # Adjust the padding of the figure
+    
+    # Saving the figure
+    plt.savefig(outFileName)
+    plt.close(fig)  # Close the plot figure to free up memory
+
+def seasonal_pie_chart(critical_conditions_by_season , outFileName):
+    '''
+    This function plots a pie chart of the number of events per season when the 
+    following criteria are coinciding:
+        Maximum Daily Precipitation > 3 in. and when Maximum Tide > 3 ft.
+        3-Day Rolling Precipitaton > 6 in. and when Maximum Tide > 3 ft.
+
+    Parameters
+    ----------
+    critical_conditions_by_season : Pandas Series
+        The season and corresponding number of events
+    outFileName : str
+        Title of the output .PNG file name.
+
+    Returns
+    -------
+    None.
+
+    '''
+    # Start plotting
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    #define Seaborn color palette to use
+    colors = sns.color_palette('pastel')[0:5]
+    labels = ['Winter', 'Spring', 'Summer', 'Fall']
+    
+    #create pie chart
+    plt.title('Chances of Extreme Tide and Precipitation Coincidences by Season', fontsize=20)
+    plt.pie(critical_conditions_by_season, labels = labels, colors = colors, autopct='%.0f%%')
+    plt.tight_layout()  # Adjust the padding of the figure
+    
+    # Saving the figure
+    plt.savefig(outFileName)
+    plt.close(fig)  # Close the plot figure to free up memory
 
     "----------------------------------Plot the Map ---------------------------------------------------------------"
 
@@ -913,8 +1047,11 @@ def plot_latitude_longitudeMap(data_frame):
     # Add basemap
     ctx.add_basemap(ax, zoom=12)
     ax.set_axis_off()
+    
+    # Saving the figure
     plt.savefig("MapDrawn.png")
     plt.close(fig)  # Close the plot figure to free up memory
+
 
 
 # the following condition checks whether we are running as a script, in which 
@@ -944,9 +1081,10 @@ if __name__ == '__main__':
     
     # Create Pandas Dataframe that summarizes Precipitation Stations Info and creates .CSV file
     precip_station_info_df = precip_station_info( DailyPrecipDataDF_2003_2023 )
-    
+
     # Clip Precipitation Dataframes to given time periods (January 2004 to December 2023)
     PrecipDataDF = ClipData( DailyPrecipDataDF_2003_2023 , "2004-01-01", "2023-12-31")
+    # print("From clipped data\n", PrecipDataDF.columns)
     
     # Clipped Precipitation Plot
     plot_precipitation( PrecipDataDF['PRCP'], 'Precipitation Data from 2004-2023', 'Figures/Precipitation Data_2004_2023.png' )
@@ -954,62 +1092,73 @@ if __name__ == '__main__':
     """ ----------------------------- Data Quality Checking -------------------------------------- """
     # 1. Data Quality Check for 9999 Values in Precipitation Data
     precip_data_check9999, precip_data_removed =  DataQuality_check9999(PrecipDataDF)
+    # print(precip_data_check9999.columns)
     
     # 2. Replace trace precipitation values
     precip_data_trace_replace, trace_replacements = replace_trace_precip_values(precip_data_check9999)
-    
+  
     # 3. Data Quality Check for Blank Values in (Both the files)
     precip_blanks, tide_blanks = DataQuality_checkBlanks(precip_data_check9999, TideDataDF)
 
     # 4. Data Quality Check for Gross Values in (Both the files)
-    precip_gross_errors, tide_gross_errors = DataQuality_checkGross(precip_data_check9999, TideDataDF)
-
+    modified_precip_data, modified_tide_data, precip_gross_errors, tide_gross_errors = DataQuality_checkGross(precip_data_check9999, TideDataDF)
+    
     #5. Data Quality Check for Outlier Values in (Both the files)
-    precip_Zscore_count, tide_Zscore_count = DataQuality_checkZScore(precip_data_check9999, TideDataDF)    
+    # modified_precip_data, precip_Zscore_count, modified_tide_data, tide_Zscore_count = DataQuality_checkZScore(precip_data_check9999, TideDataDF)
     
-    # modified_precip_data.to_csv("Datasets/Modified_Hourly_Precipitation_Data_Fort_Myers_FL.csv", index=False) 
+    modified_precip_data.to_csv("Datasets/Modified_Daily_Precipitation_Data_Fort_Myers_FL.csv", index=True) 
     
-    # modified_tide_data.to_csv("Datasets/Modified_Hourly_Tide_Data_Fort_Myers_FL.csv", index=False) 
+    modified_tide_data.to_csv("Datasets/Modified_Hourly_Tide_Data_Fort_Myers_FL.csv", index=True)
+    
     """ ----------------------------- Summary table with data quality checking results---------------------------- """
     ''' Create Pandas Dataframe that summarizes number of data quality checks and creates .CSV file'''
-    ReplacedValuesDF( trace_replacements, precip_data_removed, precip_blanks, tide_blanks, precip_gross_errors , tide_gross_errors, precip_Zscore_count, tide_Zscore_count)
+    ReplacedValuesDF( trace_replacements, precip_data_removed, precip_blanks, tide_blanks, precip_gross_errors , tide_gross_errors)
     
     """ -----------------------------  Graphical Data Analysis -------------------------------------- """
 
     ''' Original Precipitation vs. Precipitation - Post Trace Replacement '''
-    #plot_checked_data( PrecipDataDF['PRCP'] , precip_data_trace_replace['PRCP'] , 'Precipitation (in.)', 'Precipitation - Trace Replace' , 'Figures/Precipitation_Trace Replace.png' )
+    plot_checked_data( PrecipDataDF['PRCP'] , precip_data_trace_replace['PRCP'] , 'Precipitation (in.)', 'Precipitation - Trace Replace' , 'Figures/Precipitation_Trace Replace.png' )
    
     ''' Original Precipitation vs. Precipitation - Post 9999 Check '''
-    #plot_checked_data( PrecipDataDF['PRCP'] , precip_data_check9999['PRCP'] , 'Precipitation (in.)', 'Precipitation - 9999 Check' , 'Figures/Precipitation_9999 Check.png' )
+    plot_checked_data( PrecipDataDF['PRCP'] , precip_data_check9999['PRCP'] , 'Precipitation (in.)', 'Precipitation - 9999 Check' , 'Figures/Precipitation_9999 Check.png' )
     
+    
+    ''' Original Precipitation vs. Precipitation - Post Gross Values'''
+    plot_checked_data( PrecipDataDF['PRCP'] , modified_precip_data['PRCP'] , 'Precipitation (in.)', 'Precipitation - Gross Errors Removed' , 'Figures/Precip_Gross_Errors_Check.png' )
+    
+    ''' Original Precipitation vs. Precipitation - Post Gross Values'''
+    plot_checked_data( TideDataDF['Verified (ft)'] , modified_tide_data['Verified (ft)'] , 'Tide (ft.)', 'Tide - Gross Errors Removed' , 'Figures/Tide_Gross_Errors_Check.png' )
+
     """ ----------------------------- Data Analysis -------------------------------------- """
     # Group Precipitation Seasonal Data by Station and create plot
-    seasonal_precip_df = seasonal_precip( DailyPrecipDataDF_2003_2023 ) # remove this one once modified_precip_data is complete
-    '''seasonal_precip_df = seasonal_precip( modified_precip_data ) # unhash this one once modified_precip_data is complete'''
-    #plot_seasonaltrends(seasonal_precip_df, 'Figures/Seasonal_Precipitation_Trends.png')
+    seasonal_precip_df = seasonal_precip( modified_precip_data ) # unhash this one once modified_precip_data is complete
+    plot_seasonaltrends(seasonal_precip_df, 'Figures/Seasonal_Precipitation_Trends.png')
     
     # Plot mean monthly precipitation at each station
-    #for station in precip_station_info_df.index:
-    #    plot_mean_monthly_precip( PrecipDataDF , station, 'Figures/Average Monthly Precipitation_All Stations.png')
+    for station in precip_station_info_df.index:
+        plot_mean_monthly_precip( modified_precip_data , station, 'Figures/Average Monthly Precipitation_All Stations.png')
     
     # Plot histograms for daily precipitation and tide to get distributions
-    plot_precip_hist( PrecipDataDF, 'Figures/Daily Precipitation Histogram_All Stations.png' )
+    plot_precip_hist( modified_precip_data, 'Figures/Daily Precipitation Histogram_All Stations.png' )
     
-    plot_tide_hist( TideDataDF, 'Figures/Hourly Tide Histogram.png' )
+    plot_tide_hist( modified_tide_data, 'Figures/Hourly Tide Histogram.png' )
     
     # Plot when daily precipitation > 4 in at all stations
-    plot_extreme_precip( PrecipDataDF  , 'Figures/Extreme Precipitation_All Stations.png' )
+    plot_extreme_precip( modified_precip_data  , 'Figures/Extreme Precipitation_All Stations.png' )
     
     # Plot maximum monthly tide
-    plot_max_daily_tide( TideDataDF , 'Figures/Maximum Daily Tide Data.png')
+    plot_max_daily_tide( modified_tide_data , 'Figures/Maximum Daily Tide Data.png')
     
     # Plot 3-day rolling sum of precipitation
-    plot_3Dprecip_rolling_sum( PrecipDataDF , 'Figures/Rolling_Precip.png')
+    plot_3Dprecip_rolling_sum( modified_precip_data , 'Figures/Rolling_Precip.png')
     
     # Plot a combined graph of when daily precipitation > 4 in, 3-day rolling sum of precipitation > 4 in, and maximum tide
-    combined_tide_precip( TideDataDF , PrecipDataDF , 'Figures/Combined_Tide_Precip.png')
-
-
+    combined_tide_precip( modified_tide_data , modified_precip_data , 'Figures/Combined_Tide_Precip.png')
+    
+    # Calculate and plot when the critical weather and high tides coincide 
+    critical_weather_by_season = find_critical_events_grouped_by_season( modified_tide_data, modified_precip_data )
+    plot_seasonal_critical_weather_events(critical_weather_by_season , 'Figures/Seasonal_Critical_Precip_Tide.png')
+    seasonal_pie_chart(critical_weather_by_season , 'Figures/Seasonal_Pie_Chart.png')
     "----------------------------------Plot the Map ---------------------------------------------------------------"
     plot_latitude_longitudeMap(precip_station_info_df)
     
