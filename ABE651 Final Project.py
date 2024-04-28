@@ -367,72 +367,6 @@ def DataQuality_checkGross(precip_data, tide_data):
         print(f"An error occurred: {e}")
         return (0, 0)  
     
-<<<<<<< HEAD
-
-# def DataQuality_checkZScore(precip_data, tide_data):
-#     '''
-#     Adjusted to ensure 'date' column is retained.
-#     '''
-#     try:
-#         # Assuming 'date' columns are present and correctly formatted
-#         precip_data['PRCP'] = pd.to_numeric(precip_data['PRCP'], errors='coerce')
-#         precip_in_range = precip_data[(precip_data['PRCP'] >= 0) & (precip_data['PRCP'] <= 25)]
-        
-#         z_precip = np.abs(stats.zscore(precip_in_range['PRCP'].dropna()))
-#         precip_outlier_indices = np.where(z_precip > 3)[0]
-#         precip_cleaned = precip_in_range.drop(precip_in_range.index[precip_outlier_indices])
-#         precip_outlier_count = len(precip_outlier_indices)
-
-#         tide_data['Verified (ft)'] = pd.to_numeric(tide_data['Verified (ft)'], errors='coerce')
-#         tide_in_range = tide_data[(tide_data['Verified (ft)'] >= -4) & (tide_data['Verified (ft)'] <= 4)]
-        
-#         z_tide = np.abs(stats.zscore(tide_in_range['Verified (ft)'].dropna()))
-#         tide_outlier_indices = np.where(z_tide > 3)[0]
-#         tide_cleaned = tide_in_range.drop(tide_in_range.index[tide_outlier_indices])
-#         tide_outlier_count = len(tide_outlier_indices)
-
-#         return (precip_cleaned, precip_outlier_count, tide_cleaned, tide_outlier_count)
-
-#     except Exception as e:
-#         print(f"An error occurred: {e}")
-#         return (precip_data, 0, tide_data, 0)
-
-def find_critical_weather_events_grouped_by_season(precip_data, tide_data):
-    # Ensure the date is the index in both dataframes
-    precip_data.index = pd.to_datetime(precip_data.index)
-    tide_data.index = pd.to_datetime(tide_data.index)
-
-    # Filtering for daily precipitation greater than 3 inches and max daily tide greater than 3 feet
-    high_daily_precip = precip_data[precip_data['PRCP'] > 3]
-    high_tide = tide_data[tide_data['Verified (ft)'] > 3].resample('D').max()
-
-    # Calculate the 3-day rolling sum of precipitation and find when it is greater than 6 inches
-    rolling_precip = precip_data['PRCP'].rolling(window=3).sum()
-    high_rolling_precip = rolling_precip[rolling_precip > 6]
-
-    # Define a function to assign the season to each date
-    def get_season(date):
-        year = str(date.year)
-        seasons = {'Spring': pd.date_range(start=year + '-03-01', end=year + '-05-31'),
-                   'Summer': pd.date_range(start=year + '-06-01', end=year + '-08-31'),
-                   'Fall': pd.date_range(start=year + '-09-01', end=year + '-11-30'),
-                   'Winter': pd.date_range(start=year + '-12-01', end=year + '-12-31').union(
-                             pd.date_range(start=year + '-01-01', end=year + '-02-28'))}
-        for season, season_dates in seasons.items():
-            if date in season_dates:
-                return season
-        # Catch dates that are in a leap year:
-        return 'Winter'
-
-    # Check the conditions and combine the events
-    combined_conditions = (
-        high_daily_precip.index.intersection(high_tide.index)
-        .union(
-            high_rolling_precip.index.intersection(high_tide.index)
-        )
-    )
-
-=======
 
 # def DataQuality_checkZScore(precip_data, tide_data):
 #     '''
@@ -518,17 +452,11 @@ def find_critical_events_grouped_by_season( tide_data, precip_data):
         )
     )
 
->>>>>>> origin/Boss-Michelle
     # Assign each date from the combined conditions to a season
     combined_conditions_season = combined_conditions.to_series().apply(get_season)
     
     # Group by season
     critical_weather_by_season = combined_conditions_season.value_counts().reindex(['Winter', 'Spring', 'Summer', 'Fall'], fill_value=0)
-<<<<<<< HEAD
-    
-=======
-
->>>>>>> origin/Boss-Michelle
     return critical_weather_by_season
 """ ---------------------------- Summary table with data quality checking results ---------------------------- """
 
@@ -1182,19 +1110,6 @@ if __name__ == '__main__':
 
     # 4. Data Quality Check for Gross Values in (Both the files)
     modified_precip_data, modified_tide_data, precip_gross_errors, tide_gross_errors = DataQuality_checkGross(precip_data_check9999, TideDataDF)
-<<<<<<< HEAD
-
-    #5. Data Quality Check for Outlier Values in (Both the files)
-    # modified_precip_data, precip_Zscore_count, modified_tide_data, tide_Zscore_count = DataQuality_checkZScore(precip_data_check9999, TideDataDF)
-
-    modified_precip_data.to_csv("Datasets/Modified_Daily_Precipitation_Data_Fort_Myers_FL.csv", index=True) 
-    
-    modified_tide_data.to_csv("Datasets/Modified_Hourly_Tide_Data_Fort_Myers_FL.csv", index=True) 
-
-    critical_weather_by_season = find_critical_weather_events_grouped_by_season(modified_precip_data, modified_tide_data)
-    
-    plot_seasonal_critical_weather_events(critical_weather_by_season)
-=======
     
     #5. Data Quality Check for Outlier Values in (Both the files)
     # modified_precip_data, precip_Zscore_count, modified_tide_data, tide_Zscore_count = DataQuality_checkZScore(precip_data_check9999, TideDataDF)
@@ -1202,7 +1117,6 @@ if __name__ == '__main__':
     modified_precip_data.to_csv("Datasets/Modified_Daily_Precipitation_Data_Fort_Myers_FL.csv", index=True) 
     
     modified_tide_data.to_csv("Datasets/Modified_Hourly_Tide_Data_Fort_Myers_FL.csv", index=True)
->>>>>>> origin/Boss-Michelle
     
     """ ----------------------------- Summary table with data quality checking results---------------------------- """
     ''' Create Pandas Dataframe that summarizes number of data quality checks and creates .CSV file'''
