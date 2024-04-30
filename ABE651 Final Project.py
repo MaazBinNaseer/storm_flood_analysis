@@ -940,7 +940,7 @@ def combined_tide_precip( tideDataDF, precipDataDF, outFileName ):
     plt.savefig(outFileName, bbox_inches='tight')
     plt.close(fig)  # Close the plot figure to free up memory
 
-def plot_seasonal_critical_weather_events(critical_conditions_by_season , outFileName):
+def plot_seasonal_critical_weather_events(critical_conditions_by_season, outFileName):
     '''
     This function plots a bar chart of the number of events per season when the 
     following criteria are coinciding:
@@ -1051,17 +1051,6 @@ def plot_latitude_longitudeMap(data_frame):
     plt.savefig("MapDrawn.png")
     plt.close(fig)  # Close the plot figure to free up memory
 
-def plot_seasonal_critical_weather_events(critical_weather_by_season):
-    plt.figure(figsize=(10, 5))
-    critical_weather_by_season.plot(kind='bar', color=['blue', 'orange', 'green', 'red'])
-    plt.title('Sum of Critical Weather Events by Season')
-    plt.xlabel('Season')
-    plt.ylabel('Number of Critical Events')
-    plt.xticks(rotation=0)  # This will ensure that the season names are not rotated
-    plt.tight_layout()  # Adjust the padding of the figure
-    plt.savefig("Critical_Weather.png")
-
-
 # the following condition checks whether we are running as a script, in which 
 # case run the test code, otherwise functions are being imported so do not.
 # put the main routines from your code after this conditional check.
@@ -1165,7 +1154,7 @@ if __name__ == '__main__':
     
     # Calculate and plot when the critical weather and high tides coincide 
     critical_weather_by_season = find_critical_events_grouped_by_season( modified_tide_data, modified_precip_data )
-    plot_seasonal_critical_weather_events(critical_weather_by_season , 'Figures/Seasonal_Critical_Precip_Tide.png')
+    plot_seasonal_critical_weather_events(critical_weather_by_season, 'Figures/Seasonal_Critical_Precip_Tide.png')
     seasonal_pie_chart(critical_weather_by_season , 'Figures/Seasonal_Pie_Chart.png')
     "----------------------------------Plot the Map ---------------------------------------------------------------"
     plot_latitude_longitudeMap(precip_station_info_df)
