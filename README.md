@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="Picture2.jpg" alt="Fort Myers">
-</p>
-
 Overview:
 
 This Python script is designed for handling and analyzing tide and precipitation data. It includes functions to read data, clip it to specific dates, check data quality, perform seasonal analysis, and plot results. The script operates on CSV data files and produces a variety of plots and cleaned data files.
@@ -15,7 +11,7 @@ Usage Instructions
 1. Data Files: Ensure you have the CSV files for both tide and precipitation data as expected by the read_tide_data and read_precip_data functions. The files should be named and placed according to the paths specified in the script or adjusted accordingly in the script.
 2. Running the Script: The script is designed to be run as a standalone Python program: python ABE651 FinalProject.py
 3. Input Parameters: The script is currently set up to read specific file paths hardcoded into the script. If you have different files or paths, modify the paths in the script accordingly.
-4. Outputs: You will need to create a directory called Figures
+4. Outputs: You will need to create a directory called Figures.
 Plots: Plots are saved in a directory called Figures. Ensure this directory exists or modify the script to create it if necessary.
 Data Files: Cleaned data files are written back to CSV files specified within the script. Adjust paths and filenames as necessary.
 
