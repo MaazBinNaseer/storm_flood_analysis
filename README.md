@@ -1,4 +1,5 @@
-![Fort Myers][Picture2.jpg]
+![Fort Myers](Picture2.jpg)
+
 Overview:
 
 This Python script is designed for handling and analyzing tide and precipitation data. It includes functions to read data, clip it to specific dates, check data quality, perform seasonal analysis, and plot results. The script operates on CSV data files and produces a variety of plots and cleaned data files.
