@@ -1,4 +1,6 @@
-![Fort Myers](Picture2.jpg)
+<p align="center">
+  <img src="Picture2.jpg" alt="Fort Myers">
+</p>
 
 Overview:
 
