@@ -1,3 +1,4 @@
+![Fort Myers](Picture2.jpg)
 
 Overview:
 
